@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Moveworks Conversations API: Reference App</title>
+<link rel="icon" href="data:," />
+<link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+
+<section id="connect-screen" class="connect-screen">
+  <form id="connect-form" class="connect-card" aria-labelledby="connect-title">
+    <h1 id="connect-title">Connect to a Moveworks assistant</h1>
+
+    <fieldset class="auth-choice">
+      <legend>Credential</legend>
+      <label><input type="radio" name="auth" value="api_key" checked /> API key</label>
+      <label><input type="radio" name="auth" value="s2s" /> S2S credential from <code>.env</code></label>
+    </fieldset>
+
+    <label class="field">
+      <span>Data center</span>
+      <select id="base-url-select" aria-label="Data center base URL"></select>
+      <input id="base-url-custom" type="url" placeholder="https://api.moveworks.ai" hidden />
+    </label>
+
+    <label class="field">
+      <span>Bot Name</span>
+      <input id="bot-name" type="text" autocomplete="off" spellcheck="false" placeholder="e.g. acme-capi" />
+      <small>The Bot Name from your Conversations API chatbot. Sent as the Assistant-Name header.</small>
+    </label>
+
+    <label class="field" id="api-key-field">
+      <span>API key</span>
+      <input id="api-key" type="password" autocomplete="off" placeholder="Paste your key" />
+      <small>Held in this app's memory only: never stored, never logged.</small>
+    </label>
+
+    <p id="s2s-note" class="note" hidden></p>
+
+    <p id="connect-error" class="error" role="alert" hidden></p>
+    <button id="connect-btn" class="primary" type="submit">Connect</button>
+  </form>
+  <footer class="connect-foot">Reference app from <code>moveworks/conversations-api-starter</code>. Runs locally, one Moveworks instance per process.</footer>
+</section>
+
+<main id="app" class="app" hidden>
+  <header class="topbar">
+    <div><strong id="bot-chip">assistant</strong> <span id="org-chip" class="muted"></span></div>
+    <div class="topbar-actions">
+      <button id="conv-toggle" class="mobile-only">Chats</button>
+      <button id="new-conv-btn">New conversation</button>
+      <button id="notif-btn" aria-label="Notifications">Notifications <span id="notif-badge" class="badge" hidden>0</span></button>
+      <button id="disconnect-btn">Disconnect</button>
+    </div>
+  </header>
+
+  <div class="workspace">
+    <nav id="conv-sidebar" class="conv-sidebar" aria-label="Conversations">
+      <div class="sidebar-head">
+        <strong id="conv-heading">Conversations</strong>
+        <button id="conv-archived-toggle" aria-pressed="false">Archived</button>
+      </div>
+      <ul id="conv-list" class="conv-list"></ul>
+    </nav>
+
+    <section class="chat-col" aria-label="Conversation">
+      <div id="chat-scroll" class="chat-scroll">
+        <p id="chat-empty" class="muted">Connected. Ask something you would ask your assistant, such as a policy question or a request that files a ticket.</p>
+        <div id="chat-log" class="chat-log"></div>
+      </div>
+      <form id="composer" class="composer">
+        <textarea id="chat-input" rows="1" placeholder="Message your assistant" autocomplete="off" aria-label="Message your assistant"></textarea>
+        <button id="send-btn" class="primary" type="submit">Send</button>
+      </form>
+    </section>
+  </div>
+
+  <aside id="notif-drawer" class="notif-drawer" hidden aria-label="Proactive notifications">
+    <div class="drawer-head">
+      <strong>Notifications</strong>
+      <button id="notif-close" aria-label="Close notifications">Close</button>
+    </div>
+    <p class="muted">Proactive messages from other conversations, polled from the events API.</p>
+    <div id="notif-list">
+      <p id="notif-empty" class="muted">Nothing yet.</p>
+    </div>
+  </aside>
+
+  <div id="modal-backdrop" class="modal-backdrop" hidden>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <div class="modal-head">
+        <h3 id="modal-title"></h3>
+        <button id="modal-close" aria-label="Close form">Close</button>
+      </div>
+      <form id="modal-form" class="modal-form"></form>
+      <div class="modal-foot">
+        <p id="modal-error" class="error" role="alert" hidden></p>
+        <button id="modal-submit" class="primary">Submit</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" role="status" hidden></div>
+</main>
+
+<script type="module" src="/static/js/main.js"></script>
+</body>
+</html>

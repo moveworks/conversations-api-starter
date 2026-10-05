@@ -1,0 +1,77 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "moveworks-capi-starter"
+version = "0.1.0"
+description = "Reference client library, examples, and web app for the Moveworks Conversations API"
+readme = "README.md"
+license = { file = "LICENSE.txt" }
+requires-python = ">=3.10"
+authors = [{ name = "Moveworks, Inc." }]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Communications :: Chat",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+  "Typing :: Typed",
+]
+dependencies = [
+  "requests>=2.31,<3",
+  "cryptography>=42",
+  "PyJWT>=2.8,<3",
+  "python-dotenv>=1.0,<2",
+]
+
+[project.urls]
+Homepage = "https://github.com/moveworks/conversations-api-starter"
+Documentation = "https://docs.moveworks.com/api-reference/conversations-api"
+Source = "https://github.com/moveworks/conversations-api-starter"
+Issues = "https://github.com/moveworks/conversations-api-starter/issues"
+Changelog = "https://github.com/moveworks/conversations-api-starter/blob/main/CHANGELOG.md"
+
+[project.optional-dependencies]
+app = [
+  "fastapi>=0.110,<1",
+  "uvicorn>=0.29,<1",
+]
+test = [
+  "moveworks-capi-starter[app]",
+  "pytest>=8",
+  # Starlette's TestClient uses httpx2 where supported and httpx on older releases.
+  "httpx>=0.27",
+  "httpx2>=2.13",
+]
+
+# The wheel ships only the library; the reference app runs from a checkout (`python -m app`).
+[tool.setuptools.packages.find]
+include = ["moveworks_capi*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.setuptools.package-data]
+moveworks_capi = ["py.typed"]
+
+[tool.ruff]
+line-length = 140
+target-version = "py310"
+extend-exclude = ["build"]
+
+[tool.ruff.lint]
+select = ["E", "F", "B", "W"]
+
+[tool.pyright]
+include = ["moveworks_capi", "app", "examples", "tests"]
+typeCheckingMode = "basic"
+pythonVersion = "3.10"

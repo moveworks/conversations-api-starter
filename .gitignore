@@ -1,0 +1,30 @@
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local state (checkpoints, keys, captured payloads)
+checkpoints/
+*.pem
+*.key
+captured_deliveries/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+.DS_Store

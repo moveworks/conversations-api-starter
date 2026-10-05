@@ -1,0 +1,114 @@
+{
+  "actions": [
+    {
+      "label": "Complete this request",
+      "type": "URL_ACTION",
+      "url_action": {
+        "url": "https://app.moveworks.ai/r?v2_fixture_a"
+      }
+    },
+    {
+      "label": "Complete this request",
+      "type": "URL_ACTION",
+      "url_action": {
+        "url": "https://app.moveworks.ai/r?v2_fixture_b"
+      }
+    },
+    {
+      "label": "Complete this request",
+      "type": "URL_ACTION",
+      "url_action": {
+        "url": "https://app.moveworks.ai/r?v2_fixture_c"
+      }
+    }
+  ],
+  "actor": "ASSISTANT",
+  "citations": [
+    {
+      "citation_id": "cite_enrollment",
+      "display": {
+        "body": {
+          "markdown_text": {
+            "text": "Enroll in or modify your 401(k) plan\n"
+          },
+          "type": "MARKDOWN_TEXT"
+        },
+        "title": {
+          "markdown_text": {
+            "text": "**<https://example.service-now.com/sp?id=sc_cat_item&sys_id=plan_enrollment|401(k) Plan Enrollment>**"
+          },
+          "type": "MARKDOWN_TEXT"
+        }
+      },
+      "url": "https://example.service-now.com/sp?id=sc_cat_item&sys_id=plan_enrollment"
+    },
+    {
+      "citation_id": "cite_enrollment_inquiry",
+      "display": {
+        "body": {
+          "markdown_text": {
+            "text": "Ask a question about your retirement plan options or enrollment process\n"
+          },
+          "type": "MARKDOWN_TEXT"
+        },
+        "title": {
+          "markdown_text": {
+            "text": "**<https://example.service-now.com/sp?id=sc_cat_item&sys_id=enrollment_inquiry|401(k) Plan Enrollment Inquiry>**"
+          },
+          "type": "MARKDOWN_TEXT"
+        }
+      },
+      "url": "https://example.service-now.com/sp?id=sc_cat_item&sys_id=enrollment_inquiry"
+    },
+    {
+      "citation_id": "cite_retirement_inquiry",
+      "display": {
+        "body": {
+          "markdown_text": {
+            "text": "Ask a question about your existing plan\n"
+          },
+          "type": "MARKDOWN_TEXT"
+        },
+        "title": {
+          "markdown_text": {
+            "text": "**<https://example.service-now.com/sp?id=sc_cat_item&sys_id=retirement_inquiry|401(k) Retirement Plan Inquiry>**"
+          },
+          "type": "MARKDOWN_TEXT"
+        }
+      },
+      "url": "https://example.service-now.com/sp?id=sc_cat_item&sys_id=retirement_inquiry"
+    }
+  ],
+  "content": {
+    "markdown_text": {
+      "text": "It looks like **yes, there is a 401(k) plan available**. I found both a **401(k) Plan Enrollment** form and **401(k) inquiry** forms, which indicates the plan exists and that there’s a process for enrolling or asking questions about it .\n\nIf you want, I can also help you find the **best next step** for either:\n1. **enrolling in the 401(k)**, or\n2. **getting plan details** like eligibility or matching.\n\n**401(k) Retirement Plan Inquiry**\nAsk a question about your existing plan\n\n**401(k) Plan Enrollment Inquiry**\nAsk a question about your retirement plan options or enrollment process\n\n**401(k) Plan Enrollment**\nEnroll in or modify your 401(k) plan"
+    },
+    "type": "MARKDOWN_TEXT"
+  },
+  "content_references": [
+    {
+      "citation_id": "cite_enrollment",
+      "offset": 237
+    },
+    {
+      "citation_id": "cite_enrollment_inquiry",
+      "offset": 237
+    },
+    {
+      "citation_id": "cite_retirement_inquiry",
+      "offset": 237
+    }
+  ],
+  "conversation_id": "conv_fixture",
+  "created_at": "2026-09-25T18:40:42.411933Z",
+  "feedback": {
+    "helpful": {
+      "callback_id": "callback_fixture"
+    },
+    "unhelpful": {
+      "callback_id": "callback_fixture"
+    }
+  },
+  "message_id": "msg_fixture",
+  "response_id": "resp_fixture"
+}

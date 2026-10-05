@@ -1,0 +1,26 @@
+# Changelog
+
+All notable changes to this project are recorded here. The project is versioned 0.x, and breaking changes can land in minor versions.
+
+## Unreleased
+
+## 0.1.0
+
+First tagged release.
+
+### Library (`moveworks_capi`)
+
+- `ConversationsApiClient`: synchronous `/rest/v1` HTTP client that sends the `Assistant-Name` header and a `moveworks-capi-starter/0.1.0` User-Agent. Retries a 429 on every method with jittered backoff, and a 5xx or network error only on `GET`, `HEAD`, and `PATCH`, so a turn is never resent. On a 401, refreshes the bearer once through the provider's optional `invalidate()`. Usable as a context manager, with an injectable `requests.Session`. Errors carry `status_code`, `code`, and `trace_id`.
+- Bearer providers for Okta OIDC with PKCE, Entra ID with PKCE, self-signed JWT (service-to-service), and HTTP Connector API Key.
+- Responses: build `chat` and `action` turn input, submit, wait for completion (polls every 2 seconds and tolerates 429s), and extract text and actions. `extract_text` on a `FAILED` response raises `ResponseFailedError` carrying the `Response`.
+- Streaming: server-sent events client for `/responses/stream`. A 429 at open raises `RateLimitedError`; a stream that closes before its terminal event raises `StreamClosedError` with the `response_id`. `timeout_seconds` is an idle timeout.
+- Conversations: create, list, fetch, update (title, archive), and list messages.
+- Notifications: `/events` polling with a durable per-user checkpoint and an explicit first-run policy (default: skip history), single-event reads, and outbound-webhook signature verification against the tenant JWKS (`JwksFetchError` when it cannot be fetched).
+- `rendering`: helpers for displaying assistant messages in a UI. `conversations.replies_after_input` finds replies written to history under an earlier response.
+- Includes `py.typed`.
+
+### Examples, app, and tooling
+
+- Runnable examples for setup checks, each auth path, multi-turn chat, polling, webhook receipt, and listener-triggered test notifications.
+- Reference web app (`python -m app`): a plain chat surface over the library.
+- Offline test suite, plus ruff and pyright, run in CI.

@@ -1,0 +1,44 @@
+{
+  "actions": [
+    {
+      "callback_action": {
+        "callback_id": "callback_fixture"
+      },
+      "label": "File ticket",
+      "type": "CALLBACK_ACTION"
+    },
+    {
+      "label": "Edit/Add details",
+      "modal_action": {
+        "modal_id": "modal_fixture"
+      },
+      "type": "MODAL_ACTION"
+    },
+    {
+      "label": "Other help options",
+      "type": "URL_ACTION",
+      "url_action": {
+        "url": "https://app.moveworks.ai/?t=fixture"
+      }
+    }
+  ],
+  "actor": "ASSISTANT",
+  "content": {
+    "markdown_text": {
+      "text": "I understand you’d like to file a ticket for your laptop issue. Please review the provided available option to proceed.\n\n**Issue description**: I need help with my laptop issue."
+    },
+    "type": "MARKDOWN_TEXT"
+  },
+  "conversation_id": "conv_fixture",
+  "created_at": "2026-09-24T22:28:38.167584Z",
+  "feedback": {
+    "helpful": {
+      "callback_id": "callback_fixture"
+    },
+    "unhelpful": {
+      "callback_id": "callback_fixture"
+    }
+  },
+  "message_id": "msg_fixture",
+  "response_id": "resp_fixture"
+}

@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Conversations API documentation
+    url: https://docs.moveworks.com/api-reference/conversations-api
+    about: The reference for how the API behaves.
+  - name: Your Moveworks instance setup (enablement, chatbot, credentials, limits)
+    url: mailto:support@moveworks.ai
+    about: Contact your Moveworks account team or Moveworks Support. This repo cannot change your Moveworks instance's configuration.
+  - name: Security report
+    url: https://github.com/moveworks/conversations-api-starter/blob/main/SECURITY.md
+    about: Report security issues privately. Do not open a public issue.
