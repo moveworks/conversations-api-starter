@@ -187,8 +187,10 @@ def _content_text(content: Dict[str, Any]) -> Optional[str]:
 class Action:
     """One entry from a message's ``actions`` array, normalized across types.
 
-    Exactly one of ``url``, ``callback_id``, ``modal_id`` is set, matching
-    ``type`` (``URL_ACTION``, ``CALLBACK_ACTION``, ``MODAL_ACTION``).
+    For ``URL_ACTION``, ``CALLBACK_ACTION``, and ``MODAL_ACTION``, exactly one
+    of ``url``, ``callback_id``, ``modal_id`` is set, matching ``type``. A
+    ``HANDOFF_ACTION`` sets none and opens a menu built from the same
+    message's ``handoff`` options.
 
     ``is_auth_link`` flags the user-consent (OBO/UCA) authorization links the
     assistant emits when a plugin's connector needs the user to grant access.

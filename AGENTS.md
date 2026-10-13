@@ -15,7 +15,7 @@ This repo is sample code for the Moveworks Conversations API: a client library (
 - **Never resend a turn.** Rely on the shared client's backoff for 429s. Do not add a retry that resends `POST .../responses` or a stream open after a timeout or 5xx, because the server may already have accepted the turn. The client resends `POST .../responses` only after a 429 or 401, and a stream open only after a 401.
 - **Keep the default first-poll policy.** `PollingLoop` defaults to `first_run="skip_history"`, so a new user's history is not dispatched as new notifications. Keep that default in a chat surface.
 - **Call the client from a thread in async code.** The client is synchronous. Use `asyncio.to_thread`, as `app/` does.
-- **Render actions as well as text.** Messages carry `actions` (links, callbacks, modals), which a text-only client drops. Disable a message's other actions once one is taken.
+- **Render actions as well as text.** Messages carry `actions` (links, callbacks, modals, and handoff menu triggers), which a text-only client drops. Disable a message's other actions once one is taken.
 - **Treat modal ids as single-use.** Re-read the message for a fresh id rather than caching one.
 - **Convert message text in one place.** Use `moveworks_capi.rendering` (`normalize_markup`, `clean_label`, `citation_label`, `modal_html_to_markdown`, `strip_flattened_forms`, `layout_message`). The reference app does this on the server in `app/present.py`, so the browser receives Markdown.
 - **Keep display helpers in `rendering.py`.** Code that changes how message content is displayed goes there, not in the core client.

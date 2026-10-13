@@ -70,7 +70,8 @@ a { color: #0b5cd5; }
 .bubble p:last-child { margin-bottom: 0; }
 .bubble h3 { font-size: 16px; margin: 8px 0; }
 .attachment { font-size: 13px; color: #656d76; }
-.agent-header { font-weight: 600; margin-bottom: 4px; }
+.agent-header { display: flex; align-items: center; gap: 6px; font-weight: 600; margin-bottom: 4px; }
+.agent-avatar { width: 24px; height: 24px; border-radius: 50%; object-fit: cover; }
 .tag { margin-left: 8px; padding: 0 6px; border: 1px solid #c8ccd2; border-radius: 4px; font-size: 12px; font-weight: 400; }
 .sysline { margin: 8px 0; color: #656d76; font-size: 13px; text-align: center; }
 
@@ -91,8 +92,8 @@ a { color: #0b5cd5; }
 
 .handoff { margin-top: 8px; }
 .handoff summary { list-style: none; }
-.handoff h4 { margin: 10px 0 2px; font-size: 14px; }
-.handoff p { margin: 0; font-size: 13px; }
+.handoff-menu h4 { margin: 10px 0 2px; font-size: 14px; }
+.handoff-menu p { margin: 0; font-size: 13px; }
 
 .feedback-row { display: flex; gap: 4px; margin-top: 6px; }
 .feedback-comment { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }

@@ -63,7 +63,8 @@ export function renderAssistantMessage(turn, message, conversationId) {
   if (message.actor === "LIVE_AGENT") {
     const header = document.createElement("div");
     header.className = "agent-header";
-    header.textContent = (message.sender && message.sender.display_name) || "Live agent";
+    if (message.sender && message.sender.avatar_url) header.appendChild(agentAvatar(message.sender.avatar_url));
+    header.append((message.sender && message.sender.display_name) || "Live agent");
     const tag = document.createElement("span");
     tag.className = "tag";
     tag.textContent = "Live agent";
@@ -76,6 +77,18 @@ export function renderAssistantMessage(turn, message, conversationId) {
   if (message.actions.length) renderActions(turn, { ...ref, actions: message.actions });
   if (message.handoff.length) renderHandoff(turn, { ...ref, categories: message.handoff });
   if (message.feedback.helpful || message.feedback.unhelpful) renderFeedback(turn, { ...ref, ...message.feedback });
+}
+
+// The avatar is hosted by the live chat provider, outside this app. Send no
+// referrer, and drop the image if it fails to load.
+function agentAvatar(url) {
+  const img = document.createElement("img");
+  img.className = "agent-avatar";
+  img.alt = "";
+  img.referrerPolicy = "no-referrer";
+  img.addEventListener("error", () => img.remove());
+  img.src = url;
+  return img;
 }
 
 export async function sendMessage({ text, callbackId, echo }) {

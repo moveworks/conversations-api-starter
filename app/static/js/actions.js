@@ -32,6 +32,11 @@ export function actionChip(action, ref) {
     });
   } else if (action.type === "MODAL_ACTION" && action.modal_id) {
     btn.addEventListener("click", () => openModal({ ...ref, modal_id: action.modal_id }, btn.textContent, btn));
+  } else if (action.type === "HANDOFF_ACTION") {
+    // Opens this message's Message.handoff menu (see renderHandoff). Nothing
+    // is sent, so the rest of the row stays usable.
+    btn.classList.add("handoff-trigger");
+    btn.setAttribute("aria-expanded", "false");
   } else {
     btn.disabled = true;
     btn.title = "This action type is not supported by this app.";
@@ -43,6 +48,7 @@ export async function renderActions(turn, data) {
   const ref = { conversation_id: data.conversation_id, response_id: data.response_id, message_id: data.message_id };
   const row = document.createElement("div");
   row.className = "actions-row";
+  row.dataset.messageId = data.message_id || "";
   const chips = data.actions.map((action) => row.appendChild(actionChip(action, ref)));
   turn.appendChild(row);
 
@@ -84,7 +90,7 @@ function formName(modal) {
 export function lockActionRow(chip) {
   const turn = chip.closest(".turn");
   if (!turn) return;
-  for (const el of turn.querySelectorAll(":scope > .actions-row > .chip")) {
+  for (const el of turn.querySelectorAll(":scope > .actions-row > .chip, :scope > .handoff-menu .chip")) {
     if (el === chip) continue;
     if (el.tagName === "BUTTON") el.disabled = true;
     el.classList.add("stale");
@@ -95,24 +101,45 @@ export function lockActionRow(chip) {
 // Message.handoff, the Get Help menu, arrives on ordinary assistant turns,
 // including mid-handoff status messages. Native surfaces show Get Help as one
 // persistent control, so the menu sits behind a single button and only the
-// newest turn offers it (addTurn retires older ones).
+// newest turn offers it (addTurn retires older ones). When the message carries
+// a HANDOFF_ACTION, that action is the menu's trigger instead, in its place in
+// the actions row.
 export function renderHandoff(turn, data) {
   const ref = { conversation_id: data.conversation_id, response_id: data.response_id, message_id: data.message_id };
+  // One turn can hold several messages; use this message's own trigger.
+  const row = [...turn.querySelectorAll(":scope > .actions-row")].find((r) => r.dataset.messageId === (data.message_id || ""));
+  const trigger = row && row.querySelector(".handoff-trigger");
+  if (trigger) {
+    const menu = handoffMenu(data.categories, ref);
+    menu.hidden = true;
+    row.after(menu);
+    trigger.addEventListener("click", () => {
+      menu.hidden = !menu.hidden;
+      trigger.setAttribute("aria-expanded", String(!menu.hidden));
+    });
+    return;
+  }
   const wrap = document.createElement("details");
   wrap.className = "handoff";
   const summary = document.createElement("summary");
   summary.className = "chip";
   summary.textContent = "Get help";
-  wrap.appendChild(summary);
-  for (const category of data.categories) {
+  wrap.append(summary, handoffMenu(data.categories, ref));
+  turn.appendChild(wrap);
+}
+
+function handoffMenu(categories, ref) {
+  const menu = document.createElement("div");
+  menu.className = "handoff-menu";
+  for (const category of categories) {
     const h = document.createElement("h4");
     h.textContent = category.name || "Get help";
-    wrap.appendChild(h);
+    menu.appendChild(h);
     if (category.description) {
       const d = document.createElement("p");
       d.className = "muted";
       d.textContent = category.description;
-      wrap.appendChild(d);
+      menu.appendChild(d);
     }
     const items = document.createElement("div");
     items.className = "actions-row";
@@ -125,7 +152,7 @@ export function renderHandoff(turn, data) {
         items.appendChild(t);
       }
     }
-    wrap.appendChild(items);
+    menu.appendChild(items);
   }
-  turn.appendChild(wrap);
+  return menu;
 }

@@ -38,8 +38,12 @@ def present_message(message: Dict[str, Any], *, response_id: str = "", resolve_l
     snapshots.
     """
     forms = form_link_citations(message) if resolve_links else {}
+    handoff = present_handoff(message.get("handoff") or {})
     actions = []
     for i, action in enumerate(message_actions(message)):
+        # A HANDOFF_ACTION opens the message's handoff menu, so omit it when the message has no handoff options.
+        if action.type == "HANDOFF_ACTION" and not any(category["items"] for category in handoff):
+            continue
         shown = present_action(asdict(action))
         if i in forms:
             shown["form"] = {"title": citation_label(forms[i]), "summary": form_summary(forms[i])}
@@ -54,7 +58,7 @@ def present_message(message: Dict[str, Any], *, response_id: str = "", resolve_l
         "is_action": (message.get("content") or {}).get("type") == "CALLBACK_ACTION_CONTENT",
         "sources": present_sources(message),
         "actions": actions,
-        "handoff": present_handoff(message.get("handoff") or {}),
+        "handoff": handoff,
         "feedback": {
             "helpful": ((message.get("feedback") or {}).get("helpful") or {}).get("callback_id"),
             "unhelpful": ((message.get("feedback") or {}).get("unhelpful") or {}).get("callback_id"),
@@ -78,11 +82,17 @@ def present_sender(sender_info: Dict[str, Any] | None) -> Dict[str, str] | None:
     """Who wrote a ``LIVE_AGENT`` message, or None.
 
     ``sender_info`` is the only name the API gives a human agent; an actor the
-    client does not recognise would otherwise read as the assistant.
+    client does not recognise would otherwise read as the assistant. The
+    avatar is hosted by the live chat provider, so only an ``https`` URL is
+    passed to the browser.
     """
     if not sender_info or not sender_info.get("display_name"):
         return None
-    return {"display_name": sender_info["display_name"]}
+    avatar_url = sender_info.get("avatar_url") or ""
+    return {
+        "display_name": sender_info["display_name"],
+        "avatar_url": avatar_url if avatar_url.startswith("https://") else "",
+    }
 
 
 def present_action(action: Dict[str, Any]) -> Dict[str, Any]:
