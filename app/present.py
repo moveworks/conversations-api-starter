@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import asdict
 from typing import Any, Dict, List
 
-from moveworks_capi.responses import message_actions
+from moveworks_capi.responses import message_actions, message_handoff
 from moveworks_capi.rendering import (
     citation_label,
     citation_summary,
@@ -38,7 +38,7 @@ def present_message(message: Dict[str, Any], *, response_id: str = "", resolve_l
     snapshots.
     """
     forms = form_link_citations(message) if resolve_links else {}
-    handoff = present_handoff(message.get("handoff") or {})
+    handoff = present_handoff(message)
     actions = []
     for i, action in enumerate(message_actions(message)):
         # A HANDOFF_ACTION opens the message's handoff menu, so omit it when the message has no handoff options.
@@ -123,23 +123,21 @@ def present_sources(message: Dict[str, Any]) -> List[Dict[str, str]]:
     return sources
 
 
-def present_handoff(handoff: Dict[str, Any]) -> List[Dict[str, Any]]:
+def present_handoff(message: Dict[str, Any]) -> List[Dict[str, Any]]:
     """The Get Help menu from ``Message.handoff``, or an empty list."""
     categories = []
-    for category in handoff.get("handoff_categories") or []:
+    for category in message_handoff(message):
         items = []
-        for item in category.get("handoff_items") or []:
-            entry: Dict[str, Any] = {"title": clean_label(item.get("title", ""))}
-            if item.get("action"):
-                entry["action"] = present_action(_raw_action(item["action"]))
-            content = item.get("text") or {}
-            if content:
-                content_type = (content.get("type") or "").lower()
-                entry["text"] = normalize_markup((content.get(content_type) or {}).get("text", ""))
+        for item in category.items:
+            entry: Dict[str, Any] = {"title": clean_label(item.title)}
+            if item.action:
+                entry["action"] = present_action(asdict(item.action))
+            if item.text:
+                entry["text"] = normalize_markup(item.text)
             items.append(entry)
         categories.append({
-            "name": clean_label(category.get("name", "")),
-            "description": normalize_markup(category.get("description", "")),
+            "name": clean_label(category.name),
+            "description": normalize_markup(category.description or ""),
             "items": items,
         })
     return categories
@@ -161,9 +159,4 @@ def message_files(message: Dict[str, Any]) -> List[str]:
     """Names of files attached to a user turn (``plain_text.files``)."""
     plain_text = (message.get("content") or {}).get("plain_text") or {}
     return [f.get("file_name") or f.get("file_id", "") for f in plain_text.get("files") or []]
-
-
-def _raw_action(raw: Dict[str, Any]) -> Dict[str, Any]:
-    actions = message_actions({"actions": [raw]})
-    return asdict(actions[0]) if actions else {}
 

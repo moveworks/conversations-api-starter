@@ -15,9 +15,10 @@ export function actionChip(action, ref) {
     a.textContent = action.is_auth_link ? `Connect ${action.label}` : (action.form?.title || action.label);
     if (action.form?.summary) a.title = action.form.summary;
     if (action.is_auth_link) {
-      // The assistant resumes the interrupted plugin on the user's next turn.
+      // The original request resumes after consent, and the result arrives
+      // as an event on this conversation, so nothing is resent.
       a.addEventListener("click", () => {
-        toast("Grant access in the new tab, then send your next message. The assistant picks up where it left off.");
+        toast("Grant access in the new tab. The assistant continues in this conversation once you do.");
       });
     }
     return a;

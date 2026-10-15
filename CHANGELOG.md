@@ -8,6 +8,11 @@ All notable changes to this project are recorded here. The project is versioned 
 - Reference app: live agent messages show the agent's picture from `sender_info.avatar_url` (`https` only, loaded with no referrer).
 - The `Action` docstring covers `HANDOFF_ACTION`.
 - README: API usage notes for `HANDOFF_ACTION`, `sender_info` and its ServiceNow prerequisites, avatar handling, and ending a live chat.
+- `Action.purpose` carries a `URL_ACTION`'s `url_action.purpose`. `is_auth_link` is set when `purpose` is `USER_CONSENT_AUTH`, and falls back to the `/connections` URL check when `purpose` is absent or an unknown value.
+- `responses.message_handoff` normalizes a message's `Message.handoff` into `HandoffCategory` and `HandoffItem` values. The reference app builds its Get Help menu from it.
+- Reference app: after a user opens a consent link, the app says the assistant continues in the conversation. It no longer asks the user to send another message, since the original request resumes on its own.
+- `examples/chat_multiturn.py` selects its auth path with `MW_AUTH`, like the other examples.
+- README: the user-consent note describes `url_action.purpose` and the automatic resume.
 
 ## 0.1.0
 
