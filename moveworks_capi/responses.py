@@ -6,7 +6,7 @@ with ``status: IN_PROGRESS``; the reply is generated asynchronously, so
 :func:`wait_for_completion` polls ``GET .../responses/{resp_id}`` until
 ``COMPLETED`` or ``FAILED``. :func:`extract_text` and :func:`extract_actions`
 then pull the message text and the buttons out of the ``outputs`` array, and
-:func:`message_handoff` reads a message's Get Help menu.
+:func:`extract_handoff` and :func:`message_handoff` read the Get Help menu.
 """
 
 from __future__ import annotations
@@ -230,6 +230,19 @@ def extract_actions(response: Response) -> List[Action]:
     return actions
 
 
+def extract_handoff(response: Response) -> List[HandoffCategory]:
+    """Collect the Get Help menu categories from the assistant's ``MESSAGE`` outputs.
+
+    Like ``extract_actions``, this flattens every message in the response.
+    A client that renders a menu per message calls ``message_handoff`` on each.
+    """
+    categories: List[HandoffCategory] = []
+    for item in response.outputs:
+        if item.get("type") == "MESSAGE":
+            categories.extend(message_handoff(item.get("message") or {}))
+    return categories
+
+
 def message_actions(message: Dict[str, Any]) -> List[Action]:
     """Normalize one message's ``actions`` array.
 
@@ -270,6 +283,7 @@ class HandoffItem:
     type: str
     action: Optional[Action] = None
     text: Optional[str] = None
+    item_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -279,6 +293,7 @@ class HandoffCategory:
     name: str
     items: List[HandoffItem]
     description: Optional[str] = None
+    category_id: str = ""
 
 
 def message_handoff(message: Dict[str, Any]) -> List[HandoffCategory]:
@@ -299,6 +314,7 @@ def message_handoff(message: Dict[str, Any]) -> List[HandoffCategory]:
                     type=raw_item.get("type", ""),
                     action=actions[0] if actions else None,
                     text=_content_text(raw_item.get("text") or {}),
+                    item_id=raw_item.get("item_id", ""),
                 )
             )
         categories.append(
@@ -306,6 +322,7 @@ def message_handoff(message: Dict[str, Any]) -> List[HandoffCategory]:
                 name=raw_category.get("name", ""),
                 items=items,
                 description=raw_category.get("description"),
+                category_id=raw_category.get("category_id", ""),
             )
         )
     return categories

@@ -15,6 +15,7 @@ from moveworks_capi.responses import (
     create_response,
     extract_text,
     HandoffItem,
+    extract_handoff,
     message_actions,
     message_handoff,
     user_input,
@@ -297,7 +298,7 @@ def test_consent_purpose_flags_an_auth_link_on_any_url():
 
 def test_absent_purpose_falls_back_to_the_url_check():
     message = {"actions": [
-        {"label": "Connect", "type": "URL_ACTION", "url_action": {"url": "https://acme.moveworks.com/connections?x=1"}},
+        {"label": "Connect", "type": "URL_ACTION", "url_action": {"url": "https://example.moveworks.com/connections?x=1"}},
         {"label": "Docs", "type": "URL_ACTION", "url_action": {"url": "https://example.com/vpn"}},
     ]}
 
@@ -307,7 +308,7 @@ def test_absent_purpose_falls_back_to_the_url_check():
 def test_unknown_purpose_is_treated_as_unclassified():
     message = {"actions": [
         {"label": "Connect", "type": "URL_ACTION",
-         "url_action": {"url": "https://acme.moveworks.com/connections?x=1", "purpose": "FUTURE_PURPOSE"}},
+         "url_action": {"url": "https://example.moveworks.com/connections?x=1", "purpose": "FUTURE_PURPOSE"}},
         {"label": "Docs", "type": "URL_ACTION",
          "url_action": {"url": "https://example.com/vpn", "purpose": "FUTURE_PURPOSE"}},
     ]}
@@ -327,15 +328,28 @@ def test_message_handoff_normalizes_action_and_text_items():
 
     [category] = message_handoff(message)
 
-    assert (category.name, category.description) == ("IT", "Reach the service desk.")
+    assert (category.category_id, category.name, category.description) == ("c1", "IT", "Reach the service desk.")
     [ticket, call] = category.items
     assert ticket.action is not None
-    assert (ticket.type, ticket.action.modal_id, ticket.text) == ("ACTION", "m1", None)
-    assert call == HandoffItem(title="Call us", type="TEXT", text="Call extension 1234.")
+    assert (ticket.item_id, ticket.type, ticket.action.modal_id, ticket.text) == ("i1", "ACTION", "m1", None)
+    assert call == HandoffItem(title="Call us", type="TEXT", text="Call extension 1234.", item_id="i2")
 
 
 def test_message_handoff_is_empty_without_handoff_options():
     assert message_handoff({"actions": []}) == []
+
+
+def test_extract_handoff_collects_menus_from_every_message():
+    def menu(name: str) -> dict:
+        return {"handoff": {"handoff_categories": [{"category_id": name, "name": name, "handoff_items": []}]}}
+
+    response = Response(response_id="r1", conversation_id="c1", status="COMPLETED", raw={}, outputs=[
+        {"type": "MESSAGE", "message": menu("IT")},
+        {"type": "REASONING_MESSAGE", "message": menu("ignored")},
+        {"type": "MESSAGE", "message": menu("HR")},
+    ])
+
+    assert [c.name for c in extract_handoff(response)] == ["IT", "HR"]
 
 
 class TestUserInput:

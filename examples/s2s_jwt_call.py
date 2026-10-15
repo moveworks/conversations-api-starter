@@ -18,7 +18,7 @@ import logging
 import os
 from pathlib import Path
 
-from dotenv import load_dotenv
+from dotenv import find_dotenv, load_dotenv
 
 from moveworks_capi.auth import S2SJwtBearer
 from moveworks_capi.client import ConversationsApiClient
@@ -27,6 +27,7 @@ from moveworks_capi.responses import (
     Response,
     create_response,
     extract_actions,
+    extract_handoff,
     extract_text,
     wait_for_completion,
 )
@@ -43,14 +44,25 @@ def _print_actions(completed: Response) -> None:
     actions = extract_actions(completed)
     print(f"actions: {len(actions)}")
     for action in actions:
+        if action.type == "HANDOFF_ACTION":
+            print(f"  {action.type} {action.label!r}: opens the handoff menu")
+            continue
         target = action.url or action.callback_id or action.modal_id
         auth_note = " (user-consent link)" if action.is_auth_link else ""
         print(f"  {action.type} {action.label!r}: {target}{auth_note}")
+    for category in extract_handoff(completed):
+        print(f"handoff menu: {category.name!r}")
+        for item in category.items:
+            if item.action:
+                target = item.action.modal_id or item.action.url or item.action.callback_id
+                print(f"  {item.title!r}: {item.action.type} {target}")
+            else:
+                print(f"  {item.title!r}: {item.text}")
 
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-    load_dotenv()
+    load_dotenv(find_dotenv(usecwd=True))
 
     base_url = os.environ.get("MW_BASE_URL", "https://api.moveworks.ai")
     bot_name = _required("MW_BOT_NAME")

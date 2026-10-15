@@ -98,13 +98,13 @@ Run scripts from the repo root so `.env` and relative key paths resolve.
 
 ## Use the library
 
-A first call with the S2S credential: create a conversation, send one turn, wait for the reply, then print its text and actions. Replace the placeholder strings with the values from your `.env`.
+A first call with the S2S credential: create a conversation, send one turn, wait for the reply, then print its text, actions, and Get Help menu. Replace the placeholder strings with the values from your `.env`.
 
 ```python
 from moveworks_capi.auth import S2SJwtBearer
 from moveworks_capi.client import ConversationsApiClient
 from moveworks_capi.conversations import create_conversation
-from moveworks_capi.responses import create_response, extract_actions, extract_text, wait_for_completion
+from moveworks_capi.responses import create_response, extract_actions, extract_handoff, extract_text, wait_for_completion
 
 base_url = "https://api.moveworks.ai"
 bearer = S2SJwtBearer(base_url, issuer="your-issuer", audience="your-audience", key_id="your-key-id",
@@ -117,6 +117,8 @@ response = wait_for_completion(client, conversation_id, response_id)
 print(extract_text(response))
 for action in extract_actions(response):
     print(action.type, action.label)
+for category in extract_handoff(response):
+    print(category.name, [item.title for item in category.items])
 ```
 
 When the reply offers forms, its text ends with a plain-text copy of each one. A surface that shows forms as buttons displays `rendering.strip_flattened_forms(output["message"])` for each `MESSAGE` output in `response.outputs` instead of `extract_text(response)`. For other auth paths, swap the bearer provider; see the hello-call scripts in [`examples/`](examples/).
@@ -183,7 +185,7 @@ The app handles:
 - Citations, as a collapsed Sources list.
 - Feedback, with an optional comment on "not helpful" (`additional_feedback`).
 - Proactive notifications from the events API. Follow-ups for the open conversation join the thread, and notifications for other conversations appear in a drawer.
-- Live agent replies (`actor: LIVE_AGENT`) as they arrive, under the agent's name and picture from `sender_info` when present and "Live agent" otherwise, and the farewell after the user exits the chat.
+- Live agent replies (`actor: LIVE_AGENT`) as they arrive, under the agent's name and picture from `sender_info` when present, or "Live agent" otherwise, and the farewell after the user exits the chat.
 - A conversation list with titles, paging (`next_cursor`), rename, archive, and an archived view.
 - Conversation history, with older pages loaded on demand and attached file names shown.
 
@@ -224,10 +226,10 @@ This repo is sample code, not an official Moveworks SDK. The API is standard RES
 - **Use the `/rest/v1` base path.** `/assistant/v1` is deprecated, and modals are available only on `/rest/v1`. To correlate a request with Moveworks logs, read the `x-trace-id` response header.
 - **Render both `actions` and `Message.handoff`.** Assistant replies can carry an `actions` array (`URL_ACTION`, `CALLBACK_ACTION`, `MODAL_ACTION`, `HANDOFF_ACTION`), which a text-only client drops. `responses.message_actions` normalizes it. `Message.handoff` carries the Get Help menu and can appear on any turn, including during a handoff. Unless the message carries a `HANDOFF_ACTION`, offer it on the newest turn.
 - **Open the handoff menu from a `HANDOFF_ACTION`.** Render its label in its place in the actions row. Pressing it opens a menu built from the same message's `handoff` options and sends nothing. Omit it when the message has no handoff options. The menu is `handoff.handoff_categories[]`, each with a `name`, an optional `description`, and `handoff_items[]`. An `ACTION` item carries a regular `action`; a `TEXT` item carries `text` to display. `responses.message_handoff` normalizes it.
-- **Attribute live agent messages by `actor`.** A `LIVE_AGENT` message is from a human agent. Agent replies arrive on responses of their own, through the events API or a webhook like proactive notifications, and in conversation history. `sender_info.display_name` and the optional `sender_info.avatar_url` give the agent's name and picture for live chats through the ServiceNow integration, when both of these are on: **Agent names and avatars** in your ServiceNow instance (Conversational Interfaces > Settings > Agent Chat > User Chat Settings), and agent impersonation for your Moveworks instance, which Moveworks Support enables. Live chat notices, such as the chat-started message, never carry it. Without `sender_info`, show a generic label such as "Live agent". The agent's name, if any, is in the message text.
+- **Attribute live agent messages by `actor`.** A `LIVE_AGENT` message is from a human agent. Agent replies arrive on responses of their own, through the events API or a webhook like proactive notifications, and in conversation history. `sender_info.display_name` and the optional `sender_info.avatar_url` give the agent's name and picture for live chats through the ServiceNow integration, when both of these are on: **Agent names and avatars** in your ServiceNow instance (Conversational Interfaces > Settings > Agent Chat > User Chat Settings), and agent impersonation for your Moveworks instance, which Moveworks Support enables. Without `sender_info`, show a generic label such as "Live agent". The agent's name, if any, is in the message text.
 - **Treat `avatar_url` as external content.** The picture is hosted by the live chat provider, outside the Moveworks API. The app accepts only `https` URLs, loads the image with no referrer, and drops it if it fails to load.
 - **End a live chat with the agent message's action.** The action that ends the chat is the `CALLBACK_ACTION` on a `LIVE_AGENT` message. Identify it by type and actor, since its label can vary and its `callback_id` is opaque.
-- **Detect the end of a live chat from the messages.** The API has no session resource. When the agent ends the chat, a `LIVE_AGENT` message arrives with no actions after earlier ones that carried the end-chat action; treat that as the end. When the user ends it, the response to the end-chat action completes with no output, and the farewell is written under the handoff turn's `response_id` and is not published as an event, so re-read the conversation's messages after that response completes to show it.
+- **Detect the end of a live chat from the messages.** The API has no session resource. A `LIVE_AGENT` message without the end-chat action, after earlier ones that carried it, means the agent ended the chat. When the user ends it, the response to the end-chat action completes with no output; see "Re-read history after an empty response" below.
 - **Open user-consent links in a new tab.** When a plugin's connector needs per-user authorization, the assistant sends a `URL_ACTION` whose `url_action.purpose` is `USER_CONSENT_AUTH`. When `purpose` is absent, the link is unclassified and can still be a consent link, so `is_auth_link` also flags an `https://{org}.moveworks.com/connections?...` URL. Treat an unknown `purpose` value as unclassified. After the user consents, the original request resumes automatically. Listen on the events endpoint or webhook for the resumed message in the same conversation, and do not resend the request.
 - **Disable a message's other actions once one is taken.** This keeps a user from pressing a second action after answering.
 - **Merge follow-up events into the open thread.** A response can complete before the work it started does, such as filing a ticket. The follow-up message arrives later as an event on the same conversation, through the events API or a webhook.

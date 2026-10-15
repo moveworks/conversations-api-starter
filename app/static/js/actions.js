@@ -12,7 +12,7 @@ export function actionChip(action, ref) {
     a.rel = "noopener";
     // A portal-link form carries only "Complete this request"; the server
     // names it from the citation its short link resolves to.
-    a.textContent = action.is_auth_link ? `Connect ${action.label}` : (action.form?.title || action.label);
+    a.textContent = action.is_auth_link ? consentLabel(action.label) : (action.form?.title || action.label);
     if (action.form?.summary) a.title = action.form.summary;
     if (action.is_auth_link) {
       // The original request resumes after consent, and the result arrives
@@ -43,6 +43,10 @@ export function actionChip(action, ref) {
     btn.title = "This action type is not supported by this app.";
   }
   return btn;
+}
+
+function consentLabel(label) {
+  return /^connect\b/i.test(label) ? label : `Connect ${label}`;
 }
 
 export async function renderActions(turn, data) {
@@ -101,10 +105,11 @@ export function lockActionRow(chip) {
 
 // Message.handoff, the Get Help menu, arrives on ordinary assistant turns,
 // including mid-handoff status messages. Native surfaces show Get Help as one
-// persistent control, so the menu sits behind a single button and only the
-// newest turn offers it (addTurn retires older ones). When the message carries
-// a HANDOFF_ACTION, that action is the menu's trigger instead, in its place in
-// the actions row.
+// persistent control, so without a HANDOFF_ACTION the menu sits behind a
+// single "Get help" button that only the newest turn keeps (addTurn removes
+// older ones). When the message carries a HANDOFF_ACTION, that action is the
+// menu's trigger instead, in its place in the actions row, and it stays with
+// its message.
 export function renderHandoff(turn, data) {
   const ref = { conversation_id: data.conversation_id, response_id: data.response_id, message_id: data.message_id };
   // One turn can hold several messages; use this message's own trigger.

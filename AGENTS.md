@@ -27,7 +27,7 @@ This repo is sample code for the Moveworks Conversations API: a client library (
 
 These are not implemented in this repo or not available in the API. Say so rather than building around a guess:
 
-- Live agent session state, such as queue position and session end
+- Live agent session state, such as queue position or whether a chat is still open (the API has no session resource; the README's API usage notes describe inferring the end of a chat from messages)
 - File upload in modals
 - A client-initiated Get Help menu (the API offers it only when the assistant does)
 - Specific rate limits for a Moveworks instance (the docs give starting guidance, and the account team provides the limits)

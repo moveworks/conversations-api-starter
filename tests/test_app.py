@@ -191,6 +191,42 @@ class TestPresentMessage:
 
         assert [a["type"] for a in shown["actions"]] == ["CALLBACK_ACTION", "MODAL_ACTION"]
 
+    def test_handoff_items_with_nothing_to_render_are_dropped(self):
+        message = json.loads((FIXTURES / "smart_handoff_message.json").read_text())
+        category = message["handoff"]["handoff_categories"][0]
+        category["handoff_items"].append({"item_id": "empty", "title": "Nothing here", "type": "TEXT"})
+        message["handoff"]["handoff_categories"].append(
+            {"category_id": "c_empty", "name": "Empty", "handoff_items": [{"item_id": "x", "title": "No payload", "type": "ACTION"}]}
+        )
+
+        shown = present.present_message(message)
+
+        assert [c["name"] for c in shown["handoff"]] == ["IT (Recommended)"]
+        assert [i["title"] for i in shown["handoff"][0]["items"]] == ["File an IT ticket", "Start agent chat"]
+
+    def test_handoff_action_with_only_unrenderable_items_is_omitted(self):
+        message = json.loads((FIXTURES / "smart_handoff_message.json").read_text())
+        message["handoff"]["handoff_categories"][0]["handoff_items"] = [{"item_id": "x", "title": "No payload", "type": "TEXT"}]
+
+        shown = present.present_message(message)
+
+        assert shown["handoff"] == []
+        assert "HANDOFF_ACTION" not in [a["type"] for a in shown["actions"]]
+
+    def test_url_actions_must_be_web_links(self):
+        link = {"type": "URL_ACTION", "label": "Open", "url_action": {"url": "javascript:alert(1)", "purpose": "USER_CONSENT_AUTH"}}
+        message = {
+            "actions": [link, {"type": "URL_ACTION", "label": "Docs", "url_action": {"url": "https://example.com/vpn"}}],
+            "handoff": {"handoff_categories": [{"category_id": "c1", "name": "IT", "handoff_items": [
+                {"item_id": "i1", "title": "Open", "type": "ACTION", "action": link},
+            ]}]},
+        }
+
+        shown = present.present_message(message, resolve_links=False)
+
+        assert [(a["url"], a["is_auth_link"]) for a in shown["actions"]] == [(None, False), ("https://example.com/vpn", False)]
+        assert shown["handoff"][0]["items"][0]["action"]["url"] is None
+
     def test_user_messages_carry_plain_text(self):
         user = {"actor": "USER", "content": {"type": "PLAIN_TEXT", "plain_text": {"text": "I need a laptop"}}}
         assert present.present_message(user)["text"] == "I need a laptop"
@@ -500,6 +536,33 @@ class TestTurns:
         assert [event for event, _ in frames] == ["delta", "delta", "completed", "actions", "handoff", "feedback_ids"]
         assert frames[0][1] == {"output_type": "REASONING_MESSAGE", "text": "→ Looking [here](https://example.com)"}
         assert frames[1][1]["text"].startswith("I understand you’d like to file a ticket")
+
+    def test_streamed_turn_with_two_handoff_messages_keys_frames_by_message(self, monkeypatch):
+        # One streamed turn can hold several messages, each with its own HANDOFF_ACTION and menu.
+        first = json.loads((FIXTURES / "smart_handoff_message.json").read_text())
+        second = {**json.loads((FIXTURES / "smart_handoff_message.json").read_text()), "message_id": "msg_second"}
+        first["message_id"] = "msg_first"
+        events = [
+            ResponseCreated(sequence_number=0, raw={}, response_id="resp_1", conversation_id="conv_1"),
+            OutputDelta(sequence_number=1, raw={}, output_type="MESSAGE", text="", output={"message": first}),
+            OutputDelta(sequence_number=2, raw={}, output_type="MESSAGE", text="", output={"message": second}),
+            ResponseCompleted(sequence_number=3, raw={}, response_id="resp_1", status="COMPLETED"),
+        ]
+        completed = Response(response_id="resp_1", conversation_id="conv_1", status="COMPLETED", raw={},
+                             outputs=[{"type": "MESSAGE", "message": first}, {"type": "MESSAGE", "message": second}])
+        monkeypatch.setattr(turns, "stream_response", lambda *a, **kw: iter(events))
+        monkeypatch.setattr(turns, "wait_for_completion", lambda client, cid, rid, **kw: completed)
+
+        async def collect():
+            return [f async for f in turns.run_turn(_fake_client(), "conv_1", "file a ticket", None, streaming=True)]
+
+        frames = _frames(asyncio.run(collect()))
+
+        actions = [data for event, data in frames if event == "actions"]
+        handoffs = [data for event, data in frames if event == "handoff"]
+        assert [f["message_id"] for f in actions] == ["msg_first", "msg_second"]
+        assert [f["message_id"] for f in handoffs] == ["msg_first", "msg_second"]
+        assert all("HANDOFF_ACTION" in [a["type"] for a in f["actions"]] for f in actions)
 
     def test_stream_that_closes_before_the_answer_falls_back_to_polling(self, monkeypatch):
         # The stream closes after RESPONSE_IN_PROGRESS and the answer lands after a
