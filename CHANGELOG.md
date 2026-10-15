@@ -4,6 +4,8 @@ All notable changes to this project are recorded here. The project is versioned 
 
 ## Unreleased
 
+## 0.2.0
+
 - Reference app: a `HANDOFF_ACTION` opens the message's `Message.handoff` menu from its place in the actions row, and is omitted when the message has no handoff options. It was shown as an unsupported action.
 - Reference app: live agent messages show the agent's picture from `sender_info.avatar_url` (`https` only, loaded with no referrer).
 - The `Action` docstring covers `HANDOFF_ACTION`.
