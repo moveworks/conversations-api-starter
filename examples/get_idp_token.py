@@ -19,7 +19,7 @@ import json
 import logging
 import os
 
-from dotenv import load_dotenv
+from dotenv import find_dotenv, load_dotenv
 
 from moveworks_capi.auth import OidcInteractiveBearer, OktaInteractiveBearer, entra_issuer
 from moveworks_capi.errors import AuthenticationError
@@ -61,7 +61,7 @@ def _b64url_json(segment: str) -> dict:
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-    load_dotenv()
+    load_dotenv(find_dotenv(usecwd=True))
     bearer = _build_bearer(os.environ.get("MW_BASE_URL", "https://api.moveworks.ai"))
 
     authorize, token = bearer.endpoints()

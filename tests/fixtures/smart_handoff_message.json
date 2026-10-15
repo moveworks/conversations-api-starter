@@ -15,11 +15,9 @@
       "type": "MODAL_ACTION"
     },
     {
+      "handoff_action": {},
       "label": "Other help options",
-      "type": "URL_ACTION",
-      "url_action": {
-        "url": "https://app.moveworks.ai/?t=fixture"
-      }
+      "type": "HANDOFF_ACTION"
     }
   ],
   "actor": "ASSISTANT",
@@ -40,5 +38,39 @@
     }
   },
   "message_id": "msg_fixture",
-  "response_id": "resp_fixture"
+  "response_id": "resp_fixture",
+  "handoff": {
+    "handoff_categories": [
+      {
+        "category_id": "category_fixture",
+        "name": "IT (Recommended)",
+        "handoff_items": [
+          {
+            "item_id": "item_fixture_1",
+            "title": "File an IT ticket",
+            "type": "ACTION",
+            "action": {
+              "type": "MODAL_ACTION",
+              "label": "File an IT ticket",
+              "modal_action": {
+                "modal_id": "modal_fixture_ticket"
+              }
+            }
+          },
+          {
+            "item_id": "item_fixture_2",
+            "title": "Start agent chat",
+            "type": "ACTION",
+            "action": {
+              "type": "MODAL_ACTION",
+              "label": "Start agent chat",
+              "modal_action": {
+                "modal_id": "modal_fixture_chat"
+              }
+            }
+          }
+        ]
+      }
+    ]
+  }
 }

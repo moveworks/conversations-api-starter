@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "moveworks-capi-starter"
-version = "0.1.0"
+version = "0.2.0"
 description = "Reference client library, examples, and web app for the Moveworks Conversations API"
 readme = "README.md"
 license = { file = "LICENSE.txt" }

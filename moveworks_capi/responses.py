@@ -5,7 +5,8 @@ submits it. ``POST /rest/v1/conversations/{id}/responses`` returns ``202``
 with ``status: IN_PROGRESS``; the reply is generated asynchronously, so
 :func:`wait_for_completion` polls ``GET .../responses/{resp_id}`` until
 ``COMPLETED`` or ``FAILED``. :func:`extract_text` and :func:`extract_actions`
-then pull the message text and the buttons out of the ``outputs`` array.
+then pull the message text and the buttons out of the ``outputs`` array, and
+:func:`extract_handoff` and :func:`message_handoff` read the Get Help menu.
 """
 
 from __future__ import annotations
@@ -187,17 +188,22 @@ def _content_text(content: Dict[str, Any]) -> Optional[str]:
 class Action:
     """One entry from a message's ``actions`` array, normalized across types.
 
-    Exactly one of ``url``, ``callback_id``, ``modal_id`` is set, matching
-    ``type`` (``URL_ACTION``, ``CALLBACK_ACTION``, ``MODAL_ACTION``).
+    For ``URL_ACTION``, ``CALLBACK_ACTION``, and ``MODAL_ACTION``, exactly one
+    of ``url``, ``callback_id``, ``modal_id`` is set, matching ``type``. A
+    ``HANDOFF_ACTION`` sets none and opens a menu built from the same
+    message's ``handoff`` options.
+
+    ``purpose`` is the ``URL_ACTION``'s ``url_action.purpose``, such as
+    ``USER_CONSENT_AUTH``, or None when absent.
 
     ``is_auth_link`` flags the user-consent (OBO/UCA) authorization links the
-    assistant emits when a plugin's connector needs the user to grant access.
-    They arrive as ordinary ``URL_ACTION`` entries, so detection is by URL
-    shape: an
-    ``https://{org}.moveworks.com/connections?...`` link. Treat the flag as a
-    heuristic. Auth links deserve special handling in a chat surface (open in
-    a popup or new tab; after the user completes consent, the assistant
-    resumes the interrupted plugin automatically on the next turn).
+    assistant emits when a plugin's connector needs the user to grant access:
+    ``purpose`` is ``USER_CONSENT_AUTH``, or the URL is an
+    ``https://{org}.moveworks.com/connections?...`` link. An absent or unknown
+    purpose leaves the link unclassified, so the URL check stays as a
+    fallback. Open auth links in a popup or new tab. After the user consents,
+    the original request resumes automatically, and the resumed message
+    arrives as an event in the same conversation.
     """
 
     label: str
@@ -205,6 +211,7 @@ class Action:
     url: Optional[str] = None
     callback_id: Optional[str] = None
     modal_id: Optional[str] = None
+    purpose: Optional[str] = None
     is_auth_link: bool = False
 
 
@@ -223,6 +230,19 @@ def extract_actions(response: Response) -> List[Action]:
     return actions
 
 
+def extract_handoff(response: Response) -> List[HandoffCategory]:
+    """Collect the Get Help menu categories from the assistant's ``MESSAGE`` outputs.
+
+    Like ``extract_actions``, this flattens every message in the response.
+    A client that renders a menu per message calls ``message_handoff`` on each.
+    """
+    categories: List[HandoffCategory] = []
+    for item in response.outputs:
+        if item.get("type") == "MESSAGE":
+            categories.extend(message_handoff(item.get("message") or {}))
+    return categories
+
+
 def message_actions(message: Dict[str, Any]) -> List[Action]:
     """Normalize one message's ``actions`` array.
 
@@ -233,7 +253,9 @@ def message_actions(message: Dict[str, Any]) -> List[Action]:
     actions: List[Action] = []
     for raw in message.get("actions") or []:
         action_type = raw.get("type", "")
-        url = (raw.get("url_action") or {}).get("url")
+        url_action = raw.get("url_action") or {}
+        url = url_action.get("url")
+        purpose = url_action.get("purpose")
         actions.append(
             Action(
                 label=raw.get("label", ""),
@@ -241,11 +263,66 @@ def message_actions(message: Dict[str, Any]) -> List[Action]:
                 url=url,
                 callback_id=(raw.get("callback_action") or {}).get("callback_id"),
                 modal_id=(raw.get("modal_action") or {}).get("modal_id"),
-                is_auth_link=bool(
-                    action_type == "URL_ACTION"
-                    and url
-                    and ".moveworks.com/connections?" in url
-                ),
+                purpose=purpose,
+                is_auth_link=action_type == "URL_ACTION"
+                and (purpose == "USER_CONSENT_AUTH" or bool(url and ".moveworks.com/connections?" in url)),
             )
         )
     return actions
+
+
+@dataclass(frozen=True)
+class HandoffItem:
+    """One option in a Get Help menu category.
+
+    An ``ACTION`` item carries ``action``, a regular message action. A ``TEXT``
+    item carries ``text`` to show as-is, with nothing to submit.
+    """
+
+    title: str
+    type: str
+    action: Optional[Action] = None
+    text: Optional[str] = None
+    item_id: str = ""
+
+
+@dataclass(frozen=True)
+class HandoffCategory:
+    """One section of a Get Help menu, with its items in display order."""
+
+    name: str
+    items: List[HandoffItem]
+    description: Optional[str] = None
+    category_id: str = ""
+
+
+def message_handoff(message: Dict[str, Any]) -> List[HandoffCategory]:
+    """Normalize one message's ``handoff`` into categories in display order.
+
+    Returns an empty list when the message carries no handoff options. A
+    ``HANDOFF_ACTION`` in the same message's ``actions`` opens this menu, and
+    a client omits that trigger when no category has items.
+    """
+    categories: List[HandoffCategory] = []
+    for raw_category in (message.get("handoff") or {}).get("handoff_categories") or []:
+        items: List[HandoffItem] = []
+        for raw_item in raw_category.get("handoff_items") or []:
+            actions = message_actions({"actions": [raw_item["action"]]}) if raw_item.get("action") else []
+            items.append(
+                HandoffItem(
+                    title=raw_item.get("title", ""),
+                    type=raw_item.get("type", ""),
+                    action=actions[0] if actions else None,
+                    text=_content_text(raw_item.get("text") or {}),
+                    item_id=raw_item.get("item_id", ""),
+                )
+            )
+        categories.append(
+            HandoffCategory(
+                name=raw_category.get("name", ""),
+                items=items,
+                description=raw_category.get("description"),
+                category_id=raw_category.get("category_id", ""),
+            )
+        )
+    return categories

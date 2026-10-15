@@ -35,7 +35,7 @@ import sys
 from pathlib import Path
 from typing import Callable
 
-from dotenv import load_dotenv
+from dotenv import find_dotenv, load_dotenv
 
 from moveworks_capi.auth import (
     ApiKeyBearer,
@@ -125,7 +125,7 @@ def main() -> None:
     if isinstance(sys.stdout, io.TextIOWrapper):
         sys.stdout.reconfigure(line_buffering=True)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-    load_dotenv()
+    load_dotenv(find_dotenv(usecwd=True))
 
     base_url = os.environ.get("MW_BASE_URL", "https://api.moveworks.ai")
     bot_name = _required("MW_BOT_NAME")

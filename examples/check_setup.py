@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Callable, List, Tuple
 
 import requests
-from dotenv import load_dotenv
+from dotenv import find_dotenv, load_dotenv
 
 from moveworks_capi.auth import (
     ApiKeyBearer,
@@ -110,7 +110,7 @@ def _first_call_hint(exc: ConversationsApiError) -> str:
 
 
 def main() -> int:
-    load_dotenv()
+    load_dotenv(find_dotenv(usecwd=True))
 
     checks: List[Tuple[str, Callable[[], None]]] = []
     state: dict = {}

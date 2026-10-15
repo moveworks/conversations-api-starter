@@ -14,7 +14,10 @@ from moveworks_capi.responses import (
     Response,
     create_response,
     extract_text,
+    HandoffItem,
+    extract_handoff,
     message_actions,
+    message_handoff,
     user_input,
     wait_for_completion,
 )
@@ -280,6 +283,73 @@ def test_message_actions_normalizes_one_message():
         ("CALLBACK_ACTION", "cb", False),
         ("URL_ACTION", None, True),
     ]
+
+
+def test_consent_purpose_flags_an_auth_link_on_any_url():
+    message = {"actions": [
+        {"label": "Connect", "type": "URL_ACTION",
+         "url_action": {"url": "https://idp.example.com/authorize?x=1", "purpose": "USER_CONSENT_AUTH"}},
+    ]}
+
+    [action] = message_actions(message)
+
+    assert (action.purpose, action.is_auth_link) == ("USER_CONSENT_AUTH", True)
+
+
+def test_absent_purpose_falls_back_to_the_url_check():
+    message = {"actions": [
+        {"label": "Connect", "type": "URL_ACTION", "url_action": {"url": "https://example.moveworks.com/connections?x=1"}},
+        {"label": "Docs", "type": "URL_ACTION", "url_action": {"url": "https://example.com/vpn"}},
+    ]}
+
+    assert [(a.purpose, a.is_auth_link) for a in message_actions(message)] == [(None, True), (None, False)]
+
+
+def test_unknown_purpose_is_treated_as_unclassified():
+    message = {"actions": [
+        {"label": "Connect", "type": "URL_ACTION",
+         "url_action": {"url": "https://example.moveworks.com/connections?x=1", "purpose": "FUTURE_PURPOSE"}},
+        {"label": "Docs", "type": "URL_ACTION",
+         "url_action": {"url": "https://example.com/vpn", "purpose": "FUTURE_PURPOSE"}},
+    ]}
+
+    assert [a.is_auth_link for a in message_actions(message)] == [True, False]
+
+
+def test_message_handoff_normalizes_action_and_text_items():
+    message = {"handoff": {"handoff_categories": [
+        {"category_id": "c1", "name": "IT", "description": "Reach the service desk.", "handoff_items": [
+            {"item_id": "i1", "title": "File a ticket", "type": "ACTION",
+             "action": {"type": "MODAL_ACTION", "label": "File a ticket", "modal_action": {"modal_id": "m1"}}},
+            {"item_id": "i2", "title": "Call us", "type": "TEXT",
+             "text": {"type": "PLAIN_TEXT", "plain_text": {"text": "Call extension 1234."}}},
+        ]},
+    ]}}
+
+    [category] = message_handoff(message)
+
+    assert (category.category_id, category.name, category.description) == ("c1", "IT", "Reach the service desk.")
+    [ticket, call] = category.items
+    assert ticket.action is not None
+    assert (ticket.item_id, ticket.type, ticket.action.modal_id, ticket.text) == ("i1", "ACTION", "m1", None)
+    assert call == HandoffItem(title="Call us", type="TEXT", text="Call extension 1234.", item_id="i2")
+
+
+def test_message_handoff_is_empty_without_handoff_options():
+    assert message_handoff({"actions": []}) == []
+
+
+def test_extract_handoff_collects_menus_from_every_message():
+    def menu(name: str) -> dict:
+        return {"handoff": {"handoff_categories": [{"category_id": name, "name": name, "handoff_items": []}]}}
+
+    response = Response(response_id="r1", conversation_id="c1", status="COMPLETED", raw={}, outputs=[
+        {"type": "MESSAGE", "message": menu("IT")},
+        {"type": "REASONING_MESSAGE", "message": menu("ignored")},
+        {"type": "MESSAGE", "message": menu("HR")},
+    ])
+
+    assert [c.name for c in extract_handoff(response)] == ["IT", "HR"]
 
 
 class TestUserInput:

@@ -169,7 +169,7 @@ Upload `keys/public_key.pem` on the credential in the Admin Portal.
 python examples/s2s_jwt_call.py
 ```
 
-**Expected output on success:** the new `conversation_id`, the `response_id`, `status: COMPLETED`, the assistant's reply text, then its actions (type, label, and the URL, callback id, or modal id of each). A hello usually carries no actions; ask for something that offers a form to see one.
+**Expected output on success:** the new `conversation_id`, the `response_id`, `status: COMPLETED`, the assistant's reply text, then its actions (type, label, and the URL, callback id, or modal id of each) and any Get Help menu (`handoff menu:` with its items). A hello usually carries no actions; ask for something that offers a form to see one.
 
 **Common failures:**
 - `token exchange returned 401: ... INVALID_JWT` with "Client credentials not found" → no registered credential matches your JWT's issuer and `aud`. Check both against the credential in Moveworks Setup, byte for byte, and confirm the credential is Published.
@@ -202,12 +202,11 @@ python examples/api_key_call.py
 
 Creates one conversation and sends two user messages, waiting for each reply before submitting the next. Reuse `conversation_id` across turns so the assistant keeps context between messages.
 
-Uses the S2S JWT auth path by default. Swap the bearer provider at the top of the script if you prefer Okta interactive or the HTTP Connector API Key.
-
-**Env vars:** same as `s2s_jwt_call.py`.
+**Env vars:** whatever the auth path you picked with `MW_AUTH` requires (defaults to `s2s`). Same variables the individual hello-call scripts use.
 
 ```bash
 python examples/chat_multiturn.py
+MW_AUTH=okta python examples/chat_multiturn.py   # or entra | api-key
 ```
 
 **Expected output:** two `> user:` / `< assistant [COMPLETED]:` pairs printed as each turn completes, each followed by that reply's actions.

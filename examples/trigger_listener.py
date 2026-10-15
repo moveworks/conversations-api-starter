@@ -31,11 +31,11 @@ import sys
 from datetime import datetime, timezone
 
 import requests
-from dotenv import load_dotenv
+from dotenv import find_dotenv, load_dotenv
 
 
 def main() -> None:
-    load_dotenv()
+    load_dotenv(find_dotenv(usecwd=True))
     listener_url = os.environ.get("MW_TEST_LISTENER_URL")
     if not listener_url:
         raise SystemExit("missing required env var: MW_TEST_LISTENER_URL")

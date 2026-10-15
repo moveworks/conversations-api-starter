@@ -25,7 +25,7 @@ from collections import OrderedDict
 from typing import MutableMapping
 
 import uvicorn
-from dotenv import load_dotenv
+from dotenv import find_dotenv, load_dotenv
 from fastapi import FastAPI, HTTPException, Request
 
 from moveworks_capi.errors import (
@@ -100,7 +100,7 @@ def main() -> None:
     if isinstance(sys.stdout, io.TextIOWrapper):
         sys.stdout.reconfigure(line_buffering=True)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-    load_dotenv()
+    load_dotenv(find_dotenv(usecwd=True))
     host = os.environ.get("WEBHOOK_HOST", "127.0.0.1")
     port = int(os.environ.get("WEBHOOK_PORT", "8080"))
     uvicorn.run(_build_app(), host=host, port=port, log_level="info")
