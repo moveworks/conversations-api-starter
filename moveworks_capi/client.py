@@ -32,7 +32,7 @@ from __future__ import annotations
 import logging
 import random
 import time
-from typing import Any, Callable, Dict, Mapping, Optional
+from typing import Any, Callable, Dict, Mapping, Optional, Sequence, Tuple, Union
 from urllib.parse import urljoin
 
 import requests
@@ -45,6 +45,16 @@ from .errors import (
     RateLimitedError,
     RequestRejectedError,
 )
+
+MultipartContent = Union[str, bytes]
+MultipartParts = Sequence[
+    Tuple[str, Union[Tuple[Optional[str], MultipartContent], Tuple[Optional[str], MultipartContent, str]]]
+]
+"""Ordered multipart parts as ``(field, (filename, content[, content_type]))``.
+
+A ``None`` filename makes a plain form field. Parts are sent in the order
+given.
+"""
 
 BearerProvider = Callable[[], str]
 """A callable that returns a currently-valid bearer token string.
@@ -118,7 +128,17 @@ class ConversationsApiClient:
         *,
         params: Optional[Mapping[str, Any]] = None,
         json: Optional[Mapping[str, Any]] = None,
+        files: Optional[MultipartParts] = None,
     ) -> requests.Response:
+        """Send one request with the retry policy above.
+
+        ``files`` sends a ``multipart/form-data`` body instead of ``json``;
+        ``requests`` sets its ``Content-Type`` and boundary. Part content is
+        bytes or text rather than a stream, so a resend after a 429 or 401
+        carries the same body.
+        """
+        if json is not None and files is not None:
+            raise ValueError("send json or files, not both")
         method = method.upper()
         url = self.url_for(path)
         resend_after_server_error = method in RETRYABLE_ON_SERVER_ERROR
@@ -133,6 +153,7 @@ class ConversationsApiClient:
                     url,
                     params=params,
                     json=json,
+                    files=files,
                     headers=headers,
                     timeout=self._timeout,
                 )
@@ -239,8 +260,14 @@ class ConversationsApiClient:
     def get(self, path: str, *, params: Optional[Mapping[str, Any]] = None) -> requests.Response:
         return self.request("GET", path, params=params)
 
-    def post(self, path: str, *, json: Optional[Mapping[str, Any]] = None) -> requests.Response:
-        return self.request("POST", path, json=json)
+    def post(
+        self,
+        path: str,
+        *,
+        json: Optional[Mapping[str, Any]] = None,
+        files: Optional[MultipartParts] = None,
+    ) -> requests.Response:
+        return self.request("POST", path, json=json, files=files)
 
     def _invalidate_bearer(self) -> bool:
         invalidate = getattr(self._bearer_provider, "invalidate", None)
