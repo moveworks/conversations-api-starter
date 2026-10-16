@@ -228,8 +228,7 @@ python examples/upload_file.py notes.txt --prompt "Summarize this file."
 **Common failures:**
 
 - `404` on the upload → the Files API is not enabled for your Moveworks instance.
-- `400` → the file is empty or its name is not valid.
-- `413` → the file is over 100 MB.
+- `400` → the request was malformed. The library checks for an empty file, an invalid filename, and the 100 MB limit before sending, and raises `ValueError` for those.
 - `422` → the file's content failed validation.
 
 ### `poll_events.py`: Poll for proactive notifications

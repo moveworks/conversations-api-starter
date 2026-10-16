@@ -129,13 +129,15 @@ class ConversationsApiClient:
         params: Optional[Mapping[str, Any]] = None,
         json: Optional[Mapping[str, Any]] = None,
         files: Optional[MultipartParts] = None,
+        timeout: Optional[float] = None,
     ) -> requests.Response:
         """Send one request with the retry policy above.
 
         ``files`` sends a ``multipart/form-data`` body instead of ``json``;
         ``requests`` sets its ``Content-Type`` and boundary. Part content is
         bytes or text rather than a stream, so a resend after a 429 or 401
-        carries the same body.
+        carries the same body. ``timeout`` overrides the client's per-request
+        timeout for this call.
         """
         if json is not None and files is not None:
             raise ValueError("send json or files, not both")
@@ -146,16 +148,20 @@ class ConversationsApiClient:
         attempt = 0
 
         while True:
-            headers = self.headers(has_body=json is not None)
+            headers: Dict[str, Optional[str]] = dict(self.headers(has_body=json is not None))
+            body: Dict[str, Any] = {"json": json}
+            if files is not None:
+                # None removes a session-level Content-Type, so requests sets the multipart boundary.
+                headers["Content-Type"] = None
+                body = {"files": files}
             try:
                 response = self._session.request(
                     method,
                     url,
                     params=params,
-                    json=json,
-                    files=files,
                     headers=headers,
-                    timeout=self._timeout,
+                    timeout=self._timeout if timeout is None else timeout,
+                    **body,
                 )
             except requests.RequestException as exc:
                 if not resend_after_server_error or attempt >= self._max_retries:
@@ -266,8 +272,9 @@ class ConversationsApiClient:
         *,
         json: Optional[Mapping[str, Any]] = None,
         files: Optional[MultipartParts] = None,
+        timeout: Optional[float] = None,
     ) -> requests.Response:
-        return self.request("POST", path, json=json, files=files)
+        return self.request("POST", path, json=json, files=files, timeout=timeout)
 
     def _invalidate_bearer(self) -> bool:
         invalidate = getattr(self._bearer_provider, "invalidate", None)
