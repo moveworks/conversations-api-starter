@@ -148,7 +148,8 @@ class ConversationsApiClient:
         attempt = 0
 
         while True:
-            headers: Dict[str, Optional[str]] = dict(self.headers(has_body=json is not None))
+            # Any: requests accepts None to drop a session-level header, which its type hints do not allow.
+            headers: Dict[str, Any] = dict(self.headers(has_body=json is not None))
             body: Dict[str, Any] = {"json": json}
             if files is not None:
                 # None removes a session-level Content-Type, so requests sets the multipart boundary.

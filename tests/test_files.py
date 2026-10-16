@@ -73,7 +73,7 @@ def _wire_body(call: tuple) -> bytes:
     """Encode a recorded call the way ``requests`` puts it on the wire."""
     method, url, kwargs = call
     prepared = requests.Session().prepare_request(requests.Request(method, url, files=kwargs["files"], headers=kwargs["headers"]))
-    assert prepared.headers["Content-Type"].startswith("multipart/form-data; boundary=")
+    assert str(prepared.headers["Content-Type"]).startswith("multipart/form-data; boundary=")
     assert isinstance(prepared.body, bytes)
     return prepared.body
 
@@ -97,7 +97,7 @@ class TestRequest:
         client, adapter = _real_session_client({"Content-Type": "application/json"})
         upload_file(client, b"hello", filename="notes.txt")
         prepared, _ = adapter.sent[0]
-        assert prepared.headers["Content-Type"].startswith("multipart/form-data; boundary=")
+        assert str(prepared.headers["Content-Type"]).startswith("multipart/form-data; boundary=")
         assert b'filename="notes.txt"' in prepared.body
 
     def test_timeout_overrides_the_client_timeout(self) -> None:
