@@ -54,10 +54,10 @@ Recommended order for a new integration:
 1. `check_setup.py` confirms your `.env` and Moveworks instance setup work end to end. Run it first.
 2. `okta_call.py`, `entra_call.py`, `s2s_jwt_call.py`, or `api_key_call.py`, for your auth path. Each creates a conversation, sends a message, waits for the reply, and prints its text and actions.
 3. `chat_multiturn.py` sends two turns on the same `conversation_id`.
-   `upload_file.py` uploads a file and attaches it to a turn, if the Files API is enabled for your Moveworks instance.
-4. `poll_events.py` reads proactive notifications, with the same auth path.
-5. `receive_webhook.py` receives notifications by webhook, once you can host a public receiver.
-6. `trigger_listener.py` fires an Agent Studio listener to send a test notification for steps 4 and 5.
+4. `upload_file.py` uploads a file and attaches it to a turn, if the Files API is enabled for your Moveworks instance.
+5. `poll_events.py` reads proactive notifications, with the same auth path.
+6. `receive_webhook.py` receives notifications by webhook, once you can host a public receiver.
+7. `trigger_listener.py` fires an Agent Studio listener to send a test notification for steps 5 and 6.
 
 To see these patterns in one chat surface, run the reference web app with `python -m app` (see the [root README](../README.md#reference-web-app)).
 

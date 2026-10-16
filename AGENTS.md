@@ -12,7 +12,7 @@ This repo is sample code for the Moveworks Conversations API: a client library (
 
 - **Use the `/rest/v1` base path.** `/assistant/v1` is deprecated, and modals are available only on `/rest/v1`.
 - **Never fan out reads.** Reads, including `/events` polls, all count against the same rate limit. Title conversations at creation so a list renders from one call, never read each conversation's history to build a sidebar, serialize history reads, and poll conservatively.
-- **Never resend a turn.** Rely on the shared client's backoff for 429s. Do not add a retry that resends `POST .../responses` or a stream open after a timeout or 5xx, because the server may already have accepted the turn. The client resends `POST .../responses` only after a 429 or 401, and a stream open only after a 401.
+- **Never resend a turn.** Rely on the shared client's backoff for 429s. Do not add a retry that resends `POST .../responses` or a stream open after a timeout or 5xx, because the server may already have accepted the turn. The client resends `POST .../responses` and `POST /rest/v1alpha1/files` only after a 429 or 401, and a stream open only after a 401.
 - **Keep the default first-poll policy.** `PollingLoop` defaults to `first_run="skip_history"`, so a new user's history is not dispatched as new notifications. Keep that default in a chat surface.
 - **Call the client from a thread in async code.** The client is synchronous. Use `asyncio.to_thread`, as `app/` does.
 - **Render actions as well as text.** Messages carry `actions` (links, callbacks, modals, and handoff menu triggers), which a text-only client drops. Disable a message's other actions once one is taken.
@@ -28,7 +28,7 @@ This repo is sample code for the Moveworks Conversations API: a client library (
 These are not implemented in this repo or not available in the API. Say so rather than building around a guess:
 
 - Live agent session state, such as queue position or whether a chat is still open (the API has no session resource; the README's API usage notes describe inferring the end of a chat from messages)
-- File upload in modals
+- An attach control or modal `FILE` fields in the reference app (the library uploads with `files.upload_file`; a `FILE` value is `{"files": [{"file_id": ...}]}`)
 - A client-initiated Get Help menu (the API offers it only when the assistant does)
 - Specific rate limits for a Moveworks instance (the docs give starting guidance, and the account team provides the limits)
 
