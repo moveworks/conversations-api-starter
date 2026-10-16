@@ -54,9 +54,10 @@ Recommended order for a new integration:
 1. `check_setup.py` confirms your `.env` and Moveworks instance setup work end to end. Run it first.
 2. `okta_call.py`, `entra_call.py`, `s2s_jwt_call.py`, or `api_key_call.py`, for your auth path. Each creates a conversation, sends a message, waits for the reply, and prints its text and actions.
 3. `chat_multiturn.py` sends two turns on the same `conversation_id`.
-4. `poll_events.py` reads proactive notifications, with the same auth path.
-5. `receive_webhook.py` receives notifications by webhook, once you can host a public receiver.
-6. `trigger_listener.py` fires an Agent Studio listener to send a test notification for steps 4 and 5.
+4. `upload_file.py` uploads a file and attaches it to a turn, if the Files API is enabled for your Moveworks instance.
+5. `poll_events.py` reads proactive notifications, with the same auth path.
+6. `receive_webhook.py` receives notifications by webhook, once you can host a public receiver.
+7. `trigger_listener.py` fires an Agent Studio listener to send a test notification for steps 5 and 6.
 
 To see these patterns in one chat surface, run the reference web app with `python -m app` (see the [root README](../README.md#reference-web-app)).
 
@@ -210,6 +211,25 @@ MW_AUTH=okta python examples/chat_multiturn.py   # or entra | api-key
 ```
 
 **Expected output:** two `> user:` / `< assistant [COMPLETED]:` pairs printed as each turn completes, each followed by that reply's actions.
+
+### `upload_file.py`: Attach a file to a turn
+
+Uploads a local file with the [Files API](https://docs.moveworks.com/api-reference/alpha-files-api/files/upload-file), creates a conversation, and sends one turn that attaches the file in `chat.files`, then prints the reply. The Files API is in alpha and enabled per Moveworks instance; until it is enabled, the upload returns `404`. An uploaded file expires 24 hours after it is created.
+
+**Env vars:** whatever the auth path you picked with `MW_AUTH` requires (defaults to `s2s`). Same variables the individual hello-call scripts use.
+
+```bash
+python examples/upload_file.py path/to/screenshot.png
+python examples/upload_file.py notes.txt --prompt "Summarize this file."
+```
+
+**Expected output:** an `uploaded` line with the file's name, id, detected content type, and size, its expiry time, then a `> user:` / `< assistant [COMPLETED]:` pair. The reply prints even when the response is `FAILED`, since a failed response can carry a message that says why.
+
+**Common failures:**
+
+- `404` on the upload → the Files API is not enabled for your Moveworks instance.
+- `400` → the request was malformed. The library checks for an empty file, an invalid filename, and the 100 MB limit before sending, and raises `ValueError` for those.
+- `422` → the file's content failed validation.
 
 ### `poll_events.py`: Poll for proactive notifications
 

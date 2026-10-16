@@ -4,6 +4,13 @@ All notable changes to this project are recorded here. The project is versioned 
 
 ## Unreleased
 
+## 0.3.0
+
+- `files.upload_file` uploads a file with the Files API (alpha, `POST /rest/v1alpha1/files`) and returns an `UploadedFile`. Pass its `id` in `file_ids` to `create_response` or `stream_response`. The `purpose` field is sent before the `file` part, and the upload is resent only after a 429 or 401, like a turn. A rejected upload raises `RequestRejectedError` with the status, such as `404` when the Files API is not enabled, `413`, or `422`. Before sending, it checks the 100 MB limit and the API's filename rules and refuses empty content, raising `ValueError`. `timeout` overrides the client's per-request timeout for a large file.
+- `ConversationsApiClient.request` and `post` take `files` for a `multipart/form-data` body, and `timeout` to override the per-request timeout.
+- `examples/upload_file.py` uploads a file and asks the assistant about it.
+- README: usage notes for the Files API.
+
 ## 0.2.0
 
 - Reference app: a `HANDOFF_ACTION` opens the message's `Message.handoff` menu from its place in the actions row, and is omitted when the message has no handoff options. It was shown as an unsupported action.

@@ -10,6 +10,8 @@ The package is organized around independent modules that mirror the docs:
 - ``moveworks_capi.responses`` - build turn input, submit a turn, poll it to
   completion, and extract its text and actions.
 - ``moveworks_capi.streaming`` - server-sent events variant of create-response.
+- ``moveworks_capi.files`` - upload a file with the Files API (alpha) to
+  attach to a turn.
 - ``moveworks_capi.notifications`` - events polling with a checkpoint, and the
   outbound webhook verifier.
 - ``moveworks_capi.rendering`` - helpers for displaying assistant messages in

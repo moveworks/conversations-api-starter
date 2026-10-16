@@ -17,7 +17,7 @@ Use it to build:
 
 | Directory | Contents |
 |---|---|
-| [`moveworks_capi/`](moveworks_capi/) | A client library: HTTP client, auth providers, responses, streaming, conversations, event polling, webhook verification, and helpers for displaying messages |
+| [`moveworks_capi/`](moveworks_capi/) | A client library: HTTP client, auth providers, responses, streaming, file upload, conversations, event polling, webhook verification, and helpers for displaying messages |
 | [`examples/`](examples/) | Runnable scripts, one pattern each. [`examples/README.md`](examples/README.md) lists the environment variables, expected output, and common failures for each. |
 | [`app/`](app/) | A reference web app: a chat surface built on the library. See [Reference web app](#reference-web-app). |
 | [`tests/`](tests/) | An offline test suite |
@@ -28,6 +28,7 @@ moveworks_capi/
 ├── errors.py            # Named exceptions
 ├── responses.py         # Build turn input, submit, poll to completion; extract text and actions
 ├── streaming.py         # SSE client for /responses/stream
+├── files.py             # Files API (alpha) upload, for files attached to a turn
 ├── conversations.py     # Create, list, fetch, and update conversations; list messages
 ├── rendering.py         # Helpers for displaying assistant messages in a UI
 ├── auth/                # Okta and Entra ID OIDC (PKCE), self-signed JWT (S2S), HTTP Connector API Key
@@ -121,6 +122,15 @@ for category in extract_handoff(response):
     print(category.name, [item.title for item in category.items])
 ```
 
+To attach a file to a turn, upload it with `files.upload_file`, then pass its `id` in `file_ids`. A path uploads under its file name; bytes or a stream need a `filename`. A turn carries up to five files.
+
+```python
+from moveworks_capi.files import upload_file
+
+uploaded = upload_file(client, "screenshot.png")
+response_id = create_response(client, conversation_id, "What does this error mean?", file_ids=[uploaded.id])["response_id"]
+```
+
 When the reply offers forms, its text ends with a plain-text copy of each one. A surface that shows forms as buttons displays `rendering.strip_flattened_forms(output["message"])` for each `MESSAGE` output in `response.outputs` instead of `extract_text(response)`. For other auth paths, swap the bearer provider; see the hello-call scripts in [`examples/`](examples/).
 
 ---
@@ -212,7 +222,7 @@ To receive proactive notifications, the user must have sent a message through yo
 - **A production chat UI.** The reference web app runs on localhost for one Moveworks instance, with no login or multi-user sessions. Hosting and hardening are up to your integration.
 - **A batch evaluation harness.** Wrap the S2S JWT provider in your own parallelization and output.
 - **Live agent session state.** The app renders agent replies, handoff actions, and the action that ends the chat, but does not track queue position or whether the session is still open.
-- **File upload.** The [Files API](https://docs.moveworks.com/api-reference/alpha-files-api/files/upload-file) is in alpha and enabled per Moveworks instance, and this repo does not wrap it. `responses.user_input(file_ids=...)` and `stream_response(..., file_ids=...)` attach files you uploaded yourself. The app has no attach button and shows modal `FILE` fields as unsupported.
+- **File upload in the reference app.** The library uploads files (`files.upload_file`), but the app has no attach button and shows modal `FILE` fields as unsupported.
 - **`ListResponseMessages`.** Use `conversations.list_messages`, which returns the messages for the whole conversation.
 - **An async client.** The library uses `requests`. In async code, call it from a worker thread with `asyncio.to_thread`, as the reference app does.
 
@@ -222,7 +232,8 @@ This repo is sample code, not an official Moveworks SDK. The API is standard RES
 
 ## API usage notes
 
-- **Send turns as `chat` or `action` input.** A typed turn is `{"input": {"chat": {"text": ...}}}`, with text up to 20,000 characters and up to five `files`. A button press is `{"input": {"action": {"callback_id": ...}}}`. The flat `{"text"}` and `{"callback_id"}` inputs are deprecated. `responses.user_input` builds either.
+- **Send turns as `chat` or `action` input.** A typed turn is `{"input": {"chat": {"text": ...}}}`, with text up to 20,000 characters and up to five files in `files`. A button press is `{"input": {"action": {"callback_id": ...}}}`. The flat `{"text"}` and `{"callback_id"}` inputs are deprecated. `responses.user_input` builds either.
+- **Upload files before the turn that attaches them.** The [Files API](https://docs.moveworks.com/api-reference/alpha-files-api/files/upload-file) is in alpha and enabled per Moveworks instance; until it is enabled, uploads return `404`. `files.upload_file` sends `POST /rest/v1alpha1/files` as `multipart/form-data`, with the `purpose` field before the `file` part as the API requires. A file can be up to 100 MB; `upload_file` checks the size and the filename rules before it sends anything. A large file can need more than the client's per-request timeout, so pass `timeout` to `upload_file`. Like a turn, an upload is not resent after a timeout, and a timed-out upload may have been stored with no `id` returned. Moveworks detects the content type from the bytes and returns it as `content_type`. A file expires 24 hours after it is created, and a turn that references an expired id, or a file another user uploaded, is rejected. There is no operation to read, list, or delete a file.
 - **Use the `/rest/v1` base path.** `/assistant/v1` is deprecated, and modals are available only on `/rest/v1`. To correlate a request with Moveworks logs, read the `x-trace-id` response header.
 - **Render both `actions` and `Message.handoff`.** Assistant replies can carry an `actions` array (`URL_ACTION`, `CALLBACK_ACTION`, `MODAL_ACTION`, `HANDOFF_ACTION`), which a text-only client drops. `responses.message_actions` normalizes it. `Message.handoff` carries the Get Help menu and can appear on any turn, including during a handoff. Unless the message carries a `HANDOFF_ACTION`, offer it on the newest turn.
 - **Open the handoff menu from a `HANDOFF_ACTION`.** Render its label in its place in the actions row. Pressing it opens a menu built from the same message's `handoff` options and sends nothing. Omit it when the message has no handoff options. The menu is `handoff.handoff_categories[]`, each with a `name`, an optional `description`, and `handoff_items[]`. An `ACTION` item carries a regular `action`; a `TEXT` item carries `text` to display. `responses.message_handoff` normalizes it.
@@ -244,8 +255,8 @@ This repo is sample code, not an official Moveworks SDK. The API is standard RES
 - **Back off on 429.** The shared client backs off with jitter, with or without a `Retry-After` header. For batch work, follow the concurrency guidance in the overview's [practical considerations](https://docs.moveworks.com/api-reference/conversations-api#practical-considerations), test in a small batch first, and ask your Moveworks account team about your limits before sizing a rollout.
 - **Decide what the first poll does.** Polling `/events` without `starting_after` returns events from the user's history. `PollingLoop` takes a `first_run` policy. The default, `"skip_history"`, sets the checkpoint to the newest event and dispatches nothing; `"replay_history"` dispatches the history, oldest first.
 - **Poll `-` for new events.** `EventsPollingClient(client, conversation_id=...)` lists one conversation's events, and `notifications.get_event` fetches one event by id with its real conversation id. Listing one conversation is eventually consistent, so poll `-` for new events, as the [List events reference](https://docs.moveworks.com/api-reference/conversations-api/conversations-api/conversations/list-events) describes.
-- **Branch on error fields.** Every API error carries `status_code`, the body's `error.code`, and `trace_id`. A 401 raises `AuthenticationError`, a 429 raises `RateLimitedError`, and other 4xx responses raise `RequestRejectedError`. `extract_text` on a `FAILED` response raises `ResponseFailedError`. A mid-stream `ERROR` event raises `StreamError`. A stream that closes before its terminal event raises `StreamClosedError` with the `response_id`, so you can finish with `wait_for_completion`. A stream's `timeout_seconds` is an idle timeout per read.
-- **Never resend a turn.** The client retries a 429 on every method, and a 5xx or network error only on `GET`, `HEAD`, and `PATCH`. `create_response` and streaming are not retried after a timeout or 5xx, because the server may already have accepted the turn. After a 401, the S2S and OIDC providers fetch a new bearer and the client retries once; an API Key 401 raises immediately. `max_retries` (default 3) caps retries, and `0` turns them off.
+- **Branch on error fields.** Every API error carries `status_code`, the body's `error.code`, and `trace_id`. A 401 raises `AuthenticationError`, a 429 raises `RateLimitedError`, and other 4xx responses raise `RequestRejectedError`, including an upload over the size limit (`413`) or one whose content failed validation (`422`). `extract_text` on a `FAILED` response raises `ResponseFailedError`. A mid-stream `ERROR` event raises `StreamError`. A stream that closes before its terminal event raises `StreamClosedError` with the `response_id`, so you can finish with `wait_for_completion`. A stream's `timeout_seconds` is an idle timeout per read.
+- **Never resend a turn.** The client retries a 429 on every method, and a 5xx or network error only on `GET`, `HEAD`, and `PATCH`. `create_response`, streaming, and `upload_file` are not retried after a timeout or 5xx, because the server may already have accepted the turn or the file. After a 401, the S2S and OIDC providers fetch a new bearer and the client retries once; an API Key 401 raises immediately. `max_retries` (default 3) caps retries, and `0` turns them off.
 - **Check the Bot Name first if every call fails.** `MW_BOT_NAME` must match the Bot Name of the chatbot in Moveworks Setup. `check_setup.py` checks for this.
 
 ---
@@ -261,7 +272,7 @@ The suite runs offline, using synthetic keys, mocked endpoints, and recorded mes
 
 - The HTTP client: headers, retries, and backoff
 - The S2S JWT and OIDC (PKCE) auth providers
-- Conversations, responses, and streaming
+- Conversations, responses, streaming, and file upload
 - Event polling and the checkpoint
 - Webhook signature verification
 - The rendering helpers
