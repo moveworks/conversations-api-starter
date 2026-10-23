@@ -59,6 +59,8 @@ async function submit(row, btn, data, kind, comment) {
       additional_feedback: comment.trim() || null,
     }, "feedback failed");
     btn.classList.add("sent");
+    // A vote from either button settles the message, so close an open comment box.
+    if (row.nextElementSibling?.classList.contains("feedback-comment")) row.nextElementSibling.remove();
     toast(kind === "helpful" ? "Thanks, feedback recorded." : "Feedback recorded.");
     return true;
   } catch (e) {

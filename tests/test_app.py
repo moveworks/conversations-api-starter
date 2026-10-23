@@ -693,7 +693,7 @@ class TestNotificationPolling:
     def _connect(self, monkeypatch, client: _EventsClient) -> list:
         dispatched: list = []
 
-        def dispatch(user_id, event):
+        def dispatch(user_id, event, client=None):
             dispatched.append(event.event_id)
 
         monkeypatch.setattr(server, "_dispatch_polled_event", dispatch)
@@ -749,6 +749,32 @@ class TestNotificationPolling:
 
 async def _ready(value):
     return value
+
+
+class TestDispatch:
+    def test_events_from_a_replaced_connection_are_dropped(self):
+        current, previous = object(), object()
+        server.session.client = cast(Any, current)
+        queue: asyncio.Queue = asyncio.Queue()
+        server.session.event_subscribers.append(queue)
+
+        server._dispatch_polled_event("app-user", cast(Any, "old"), cast(Any, previous))
+        server._dispatch_polled_event("app-user", cast(Any, "new"), cast(Any, current))
+
+        assert queue.get_nowait() == "new"
+        assert queue.empty()
+
+    def test_an_event_from_the_polling_thread_wakes_the_stream_at_once(self):
+        import threading
+
+        async def scenario():
+            server.session.loop = asyncio.get_running_loop()
+            queue: asyncio.Queue = asyncio.Queue()
+            server.session.event_subscribers.append(queue)
+            threading.Thread(target=server._dispatch_polled_event, args=("app-user", "evt")).start()
+            return await asyncio.wait_for(queue.get(), timeout=1.0)
+
+        assert asyncio.run(scenario()) == "evt"
 
 
 class TestNotifications:

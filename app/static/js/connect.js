@@ -3,7 +3,7 @@ import { $ } from "./dom.js";
 import { state } from "./state.js";
 import { chatLog, resetChat } from "./chat.js";
 import { dropModalReads } from "./modals.js";
-import { loadConversations } from "./conversations.js";
+import { cancelOpen, loadConversations } from "./conversations.js";
 import { closeNotifications, connectNotifications } from "./notifications.js";
 
 let env = {};
@@ -16,10 +16,12 @@ export async function boot() {
   const select = $("base-url-select");
   for (const url of session.known_base_urls) select.appendChild(new Option(url, url));
   select.appendChild(new Option("Custom base URL…", "__custom__"));
-  select.addEventListener("change", () => ($("base-url-custom").hidden = select.value !== "__custom__"));
+  // Disabled while hidden, so a half-typed URL cannot block the form's validation.
+  const showCustom = (show) => { $("base-url-custom").hidden = $("base-url-custom").disabled = !show; };
+  select.addEventListener("change", () => showCustom(select.value === "__custom__"));
   // Defaults from .env are a convenience; both stay editable.
   if (env.base_url && session.known_base_urls.includes(env.base_url)) select.value = env.base_url;
-  else if (env.base_url) { select.value = "__custom__"; $("base-url-custom").value = env.base_url; $("base-url-custom").hidden = false; }
+  else if (env.base_url) { select.value = "__custom__"; $("base-url-custom").value = env.base_url; showCustom(true); }
   if (env.bot_name) $("bot-name").value = env.bot_name;
   if (Array.isArray(env.s2s_missing) && !env.s2s_missing.length) document.querySelector('input[name="auth"][value="s2s"]').checked = true;
   for (const radio of document.querySelectorAll('input[name="auth"]')) radio.addEventListener("change", showAuthChoice);
@@ -78,6 +80,7 @@ function enterApp(botName, baseUrl) {
 export async function disconnect() {
   await postJson("/api/disconnect", {});
   resetChat();
+  cancelOpen();
   dropModalReads();
   closeNotifications();
   state.conversationId = null;
