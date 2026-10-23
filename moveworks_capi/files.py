@@ -79,8 +79,8 @@ def upload_file(
         filename: The name the file is uploaded under, returned as ``name``.
             Defaults to the base name of a path; required for bytes and
             streams.
-        purpose: What the file is for. ``CONVERSATIONS_ATTACHMENT`` is the
-            only accepted value.
+        purpose: What the file is for. Use ``CONVERSATIONS_ATTACHMENT`` for a
+            file attached to a turn or a modal FILE field.
         timeout: Seconds to wait for the upload, in place of the client's
             per-request timeout. A large file can need longer.
 

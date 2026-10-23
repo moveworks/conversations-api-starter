@@ -16,4 +16,4 @@ Vulnerabilities in the Moveworks Conversations API itself, or in your production
 
 ## Disclaimer
 
-This repository is reference code, provided as-is under its license. It is not a supported Moveworks product and carries no SLA. The Conversations API is in Controlled Availability and its behavior can change; verify against the [official documentation](https://docs.moveworks.com/api-reference/conversations-api) before using patterns from this repository in production.
+This repository is reference code, provided as-is under its license. It is not a supported Moveworks product and carries no SLA. The Conversations API is in Controlled Availability and its behavior can change; verify against the [official documentation](https://docs.moveworks.com/api-reference/conversations-api/overview) before using patterns from this repository in production.

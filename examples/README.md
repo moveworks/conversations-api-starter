@@ -57,7 +57,7 @@ Recommended order for a new integration:
 4. `upload_file.py` uploads a file and attaches it to a turn, if the Files API is enabled for your Moveworks instance.
 5. `poll_events.py` reads proactive notifications, with the same auth path.
 6. `receive_webhook.py` receives notifications by webhook, once you can host a public receiver.
-7. `trigger_listener.py` fires an Agent Studio listener to send a test notification for steps 5 and 6.
+7. `trigger_listener.py` fires a Tool Studio listener to send a test notification for steps 5 and 6.
 
 To see these patterns in one chat surface, run the reference web app with `python -m app` (see the [root README](../README.md#reference-web-app)).
 
@@ -301,7 +301,7 @@ During a key-rotation grace period, the `webhook-signature` header can carry sev
 
 ### `trigger_listener.py`: Proactive notification trigger
 
-POSTs `{"email", "message"}` to an Agent Studio listener whose plugin notifies that user, so `poll_events.py`, `receive_webhook.py`, and the reference web app's notification drawer have a notification to receive.
+POSTs `{"email", "message"}` to a Tool Studio listener whose plugin notifies that user, so `poll_events.py`, `receive_webhook.py`, and the reference web app's notification drawer have a notification to receive.
 
 **Env vars:** `MW_TEST_LISTENER_URL`, `MW_TEST_NOTIFY_EMAIL` (the recipient; defaults to `MW_S2S_USER_EMAIL` when unset), and `MW_TEST_LISTENER_SECRET` for a secured listener (HMAC-SHA256 of the raw body, hex, in `X-Signature`).
 
@@ -311,14 +311,14 @@ python examples/trigger_listener.py "optional message text"
 
 #### Testing proactive notifications
 
-To send a test notification on demand, use an Agent Studio listener and a plugin that ends in a `notify` step. Build them once per test Moveworks instance:
+To send a test notification on demand, use a Tool Studio listener and a plugin that ends in a `notify` step. Build them once per test Moveworks instance:
 
 1. **Compound action** with inputs `email` and `message`: a `mw.get_user_by_email` step, then `notify` with `recipient_id` set to that user's id and `message` set to the `message` input.
 2. **Listener** with signature verification: HMAC-SHA256 over the raw body, read from the `X-Signature` header, with a secret you generate. Unsecured listeners also work, limited to one request per 10 seconds per Moveworks instance.
 3. **Plugin** with a system trigger on that listener, mapping `parsed_body.email` and `parsed_body.message` into the compound action.
 4. Put the listener URL (`https://api.moveworks.ai/webhooks/v1/listeners/{url id}/notify`), the secret, and your email in `.env` as `MW_TEST_LISTENER_URL`, `MW_TEST_LISTENER_SECRET`, and `MW_TEST_NOTIFY_EMAIL`.
 
-Delivery goes to the channel the user used most recently, so send a message through the Conversations API first (from the web app, for example), then run `trigger_listener.py`. A notification usually arrives in a new conversation titled "System Initiated Conversation", so in the web app it lands in the notifications drawer, not the open thread. It can take several seconds to appear in `/events`. A secured listener accepts the request before verifying the signature, so a rejected signature appears only in the listener's logs in Agent Studio.
+Delivery goes to the channel the user used most recently, so send a message through the Conversations API first (from the web app, for example), then run `trigger_listener.py`. A notification usually arrives in a new conversation titled "System Initiated Conversation", so in the web app it lands in the notifications drawer, not the open thread. It can take several seconds to appear in `/events`. A secured listener accepts the request before verifying the signature, so a rejected signature appears only in the listener's logs in Tool Studio.
 
 ### `get_idp_token.py`: Interactive auth-legs diagnostic
 

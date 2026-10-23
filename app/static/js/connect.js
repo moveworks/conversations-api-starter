@@ -1,7 +1,8 @@
 import { getJson, postJson } from "./api.js";
 import { $ } from "./dom.js";
 import { state } from "./state.js";
-import { chatLog } from "./chat.js";
+import { chatLog, resetChat } from "./chat.js";
+import { dropModalReads } from "./modals.js";
 import { loadConversations } from "./conversations.js";
 import { closeNotifications, connectNotifications } from "./notifications.js";
 
@@ -76,6 +77,8 @@ function enterApp(botName, baseUrl) {
 
 export async function disconnect() {
   await postJson("/api/disconnect", {});
+  resetChat();
+  dropModalReads();
   closeNotifications();
   state.conversationId = null;
   chatLog.replaceChildren();

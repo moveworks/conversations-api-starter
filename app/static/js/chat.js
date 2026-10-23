@@ -91,25 +91,50 @@ function agentAvatar(url) {
   return img;
 }
 
+// One reply at a time per conversation: the composer and action buttons
+// wait while a reply is arriving.
+let inFlight = null;
+
+export function replyInProgress() {
+  return inFlight !== null;
+}
+
+// Leaving a conversation abandons its reply, so it cannot land in the next one.
+export function resetChat() {
+  if (inFlight) inFlight.abort();
+}
+
 export async function sendMessage({ text, callbackId, echo }) {
+  if (inFlight) return;
+  const controller = new AbortController();
+  inFlight = controller;
   if (echo) addUserBubble(echo);
   $("chat-input").disabled = true;
   $("send-btn").disabled = true;
-  const ctx = { turn: addTurn("assistant"), reasoning: null, bubble: null };
+  const ctx = { turn: addTurn("assistant"), reasoning: null, bubble: null, failed: false };
   try {
     const resp = await postRaw("/api/message", {
       text: text || null,
       callback_id: callbackId || null,
       conversation_id: state.conversationId,
-    });
+    }, "POST", controller.signal);
     if (!resp.ok) {
       const body = await resp.json().catch(() => ({}));
       throw new Error(apiDetail(body, `request failed (${resp.status})`));
     }
-    await readEventStream(resp, (frame) => handleFrame(frame, ctx));
+    await readEventStream(resp, (frame) => { if (!controller.signal.aborted) handleFrame(frame, ctx); });
+    // A FAILED response can still carry the assistant's own explanation as a
+    // MESSAGE, sometimes filed after `completed` (or `completed` arrives twice
+    // when the stream closes early), so decide once the turn has ended.
+    if (ctx.failed && !ctx.bubble) addErrorLine("The assistant could not complete that response. Try again, or rephrase.");
+    // Announce the finished reply once, rather than every streamed snapshot.
+    if (ctx.bubble && !controller.signal.aborted) $("reply-status").textContent = ctx.bubble.textContent;
   } catch (e) {
-    addErrorLine(String(e.message || e));
+    // Test the signal, not the error: a body read cut off by the abort can
+    // surface as an ordinary "request failed" error.
+    if (!controller.signal.aborted) addErrorLine(String(e.message || e));
   } finally {
+    inFlight = null;
     $("chat-input").disabled = false;
     $("send-btn").disabled = false;
     $("chat-input").focus();
@@ -145,7 +170,7 @@ function handleFrame({ event, data }, ctx) {
     renderMarkdown(ctx.bubble, data.text || "");
     renderSources(ctx.turn, data.sources);
   } else if (event === "completed") {
-    if (data.status === "FAILED") addErrorLine("The assistant could not complete that response. Try again, or rephrase.");
+    if (data.status === "FAILED") ctx.failed = true;
   } else if (event === "late_message") {
     if (state.shownMessageIds.has(data.message.message_id)) return;
     // A reply the API filed under an earlier response (the Exit Live Chat

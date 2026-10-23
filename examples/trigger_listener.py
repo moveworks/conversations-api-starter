@@ -1,4 +1,4 @@
-"""Fire an Agent Studio listener to produce a proactive notification.
+"""Fire a Tool Studio listener to produce a proactive notification.
 
 Usage:
     # set MW_TEST_LISTENER_URL (and MW_TEST_LISTENER_SECRET if secured) in .env
@@ -15,7 +15,7 @@ notification drawer (which can also send one itself).
 A secured listener verifies an HMAC-SHA256 of the exact request body, hex
 encoded, in ``X-Signature``. A secured listener accepts the request before
 verifying the signature, so a rejected signature appears only in the
-listener's logs in Agent Studio. Unsecured
+listener's logs in Tool Studio. Unsecured
 listeners are rate-limited to about one request per ten seconds per Moveworks
 instance. Notifications route to the user's most recent channel, so send at
 least one message through your Conversations API integration first.

@@ -177,7 +177,7 @@ def main() -> int:
         response_id = submitted.get("response_id")
         if not response_id:
             raise RuntimeError(f"POST /responses missing response_id: {submitted}")
-        completed = wait_for_completion(client, conv_id, response_id, timeout_seconds=45.0)
+        completed = wait_for_completion(client, conv_id, response_id)
         state["completed"] = completed
         if completed.status != "COMPLETED":
             raise RuntimeError(f"response reached terminal status {completed.status}, not COMPLETED")

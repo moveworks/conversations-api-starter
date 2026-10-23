@@ -26,11 +26,12 @@ export async function getJson(url) {
   return readJson(await fetch(url));
 }
 
-export function postRaw(url, body, method = "POST") {
+export function postRaw(url, body, method = "POST", signal = undefined) {
   return fetch(url, {
     method,
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body || {}),
+    signal,
   });
 }
 

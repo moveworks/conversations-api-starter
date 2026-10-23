@@ -25,6 +25,29 @@ export function fetchModalCached(ref) {
   return modalCache.get(ref.modal_id);
 }
 
+// Reads that only name a button wait their turn, one at a time across the
+// page, so a long history stays inside the rate limit. Leaving the
+// conversation drops the ones still waiting.
+let nameReads = Promise.resolve();
+let generation = 0;
+
+// `stillNeeded`: checked when the read's turn comes, so buttons no longer on
+// the page do not hold up the rest.
+export function readModalForName(ref, stillNeeded = () => true) {
+  const started = generation;
+  const read = nameReads.then(() => {
+    if (started !== generation || !stillNeeded()) throw new DOMException("Conversation changed.", "AbortError");
+    return fetchModalCached(ref);
+  });
+  nameReads = read.catch(() => {});
+  return read;
+}
+
+export function dropModalReads() {
+  generation += 1;
+  modalCache.clear();
+}
+
 export async function openModal(ref, label, sourceChip) {
   current = { ...emptyModalState(), ref, chip: sourceChip || null };
   $("modal-title").textContent = label || "Form";
@@ -32,6 +55,7 @@ export async function openModal(ref, label, sourceChip) {
   const form = $("modal-form");
   form.innerHTML = `<p class="muted">Loading the form…</p>`;
   $("modal-backdrop").hidden = false;
+  $("modal-close").focus();
   try {
     const modal = await fetchModalCached(ref);
     $("modal-title").textContent = modal.title || label || "Form";
@@ -92,12 +116,15 @@ function displayField(d) {
   if (d.text) {
     el.className = `display-${(d.text.style || "NORMAL").toLowerCase()}`;
     renderMarkdown(el, d.text.text || "");
-  } else if (d.image) {
+  } else if (d.image?.url) {
     const img = document.createElement("img");
     img.src = d.image.url;
     img.alt = "";
     img.style.maxWidth = "100%";
     el.appendChild(img);
+  } else if (d.download && !d.download.url) {
+    // The server drops URLs that are not http(s).
+    el.textContent = d.download.text || "Download";
   } else if (d.download) {
     const a = document.createElement("a");
     a.href = d.download.url;
@@ -276,8 +303,10 @@ export async function submitModal() {
 }
 
 export function closeModal() {
+  const opener = current.chip;
   $("modal-backdrop").hidden = true;
   current = emptyModalState();
+  if (opener?.isConnected && !opener.disabled) opener.focus();
 }
 
 function showError(text) {

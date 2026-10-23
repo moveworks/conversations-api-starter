@@ -103,7 +103,7 @@ def wait_for_completion(
     conversation_id: str,
     response_id: str,
     *,
-    timeout_seconds: float = 60.0,
+    timeout_seconds: float = 120.0,
     poll_interval_seconds: float = 2.0,
     initial_delay_seconds: float = 1.0,
 ) -> Response:

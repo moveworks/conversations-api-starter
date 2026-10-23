@@ -32,12 +32,11 @@ import socket
 import sys
 import time
 from pathlib import Path
-from typing import AsyncIterator, Dict, Literal
-from urllib.parse import urlparse
+from typing import Any, AsyncIterator, Dict, Literal
 
 from dotenv import dotenv_values
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette.middleware.trustedhost import TrustedHostMiddleware
@@ -57,6 +56,17 @@ from app.turns import run_turn
 log = logging.getLogger(__name__)
 
 STATIC_DIR = Path(__file__).parent / "static"
+
+# Without a Cache-Control header browsers guess freshness from Last-Modified
+# and keep running old JS after an edit; revalidating costs only a 304.
+REVALIDATE = {"Cache-Control": "no-cache"}
+
+
+class RevalidatedStaticFiles(StaticFiles):
+    def file_response(self, *args: Any, **kwargs: Any) -> Response:
+        response = super().file_response(*args, **kwargs)
+        response.headers.update(REVALIDATE)
+        return response
 REPO_ROOT = Path(__file__).resolve().parents[1]
 ENV_FILE = REPO_ROOT / ".env"
 HOST = "127.0.0.1"
@@ -161,17 +171,18 @@ def build_app() -> FastAPI:
     async def same_origin_json_writes(request: Request, call_next):
         if request.method in ("POST", "PATCH", "PUT", "DELETE"):
             origin = request.headers.get("origin")
-            if origin and urlparse(origin).hostname not in LOCAL_HOSTNAMES:
+            # The full origin, port included: another local port is another site.
+            if origin and origin != f"{request.url.scheme}://{request.headers.get('host', '')}":
                 return JSONResponse({"detail": "Cross-origin request refused."}, status_code=403)
             if not request.headers.get("content-type", "").startswith("application/json"):
                 return JSONResponse({"detail": "Send JSON."}, status_code=415)
         return await call_next(request)
 
-    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+    app.mount("/static", RevalidatedStaticFiles(directory=str(STATIC_DIR)), name="static")
 
     @app.get("/")
     async def index() -> FileResponse:
-        return FileResponse(STATIC_DIR / "index.html")
+        return FileResponse(STATIC_DIR / "index.html", headers=REVALIDATE)
 
     @app.get("/api/session")
     async def get_session() -> dict:
