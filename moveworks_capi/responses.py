@@ -36,8 +36,8 @@ def user_input(
     ``{"action": {"callback_id": ...}}``. The older flat ``{"text": ...}`` and
     ``{"callback_id": ...}`` shapes still work but are deprecated.
 
-    ``file_ids`` are ids returned by the Files API upload, which is in alpha
-    and enabled per Moveworks instance; this starter does not upload files itself.
+    ``file_ids`` are ids returned by ``files.upload_file``. The Files API is
+    in alpha and enabled per Moveworks instance.
     """
     authored = text is not None or bool(file_ids)
     if authored == (callback_id is not None):
