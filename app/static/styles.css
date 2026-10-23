@@ -156,4 +156,6 @@ button.conv-title { flex: 1 1 100%; text-align: left; background: none; border: 
   .conv-sidebar { position: fixed; top: 49px; bottom: 0; left: 0; z-index: 1; }
 }
 /* Read by screen readers, not shown: the finished reply is announced once. */
-.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+/* Fixed, not absolute: an absolute element with no positioned ancestor sits at
+   the chat's full content height and makes the whole page scroll. */
+.visually-hidden { position: fixed; top: 0; left: 0; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
