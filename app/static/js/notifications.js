@@ -28,6 +28,8 @@ export function connectNotifications() {
         renderMarkdown(bubble, data.text || "");
         turn.appendChild(bubble);
       }
+      // Follow-ups land in the thread without a reply in flight, so announce them here.
+      $("reply-status").textContent = turn.querySelector(".bubble")?.textContent || "";
       scrollDown();
       return;
     }

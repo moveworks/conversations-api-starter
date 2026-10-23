@@ -4,6 +4,8 @@ All notable changes to this project are recorded here. The project is versioned 
 
 ## Unreleased
 
+- Reference app: a poll still running from a previous connection does not write into the new one, and a polled notification reaches the browser as soon as the poll returns, rather than at the stream's next heartbeat.
+- Reference app: a conversation opened twice, or while another is loading, renders once. The custom base URL field takes part in the connect form only while it is shown. A vote from either feedback button closes an open comment box. Screen readers also hear follow-ups that arrive in the open conversation, and error lines.
 - Citation titles and bodies are read from whichever text type they arrive in (`PLAIN_TEXT`, `COMMONMARK_TEXT`, or `MARKDOWN_TEXT`), so labels, snippets, and form matching work when an instance sends CommonMark. `rendering.citation_body` returns a citation's body text.
 - `wait_for_completion` waits up to 120 seconds by default, the time the API allows for a response to reach a terminal state. `check_setup.py` uses the same default.
 - Reference app: a `FAILED` response shows its own message when it carries one, and the generic "could not complete" banner only when it does not.

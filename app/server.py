@@ -106,6 +106,8 @@ class Session:
         self.polling_loop: PollingLoop | None = None
         self.checkpoint = InMemoryCheckpoint()
         self.connected_at: float = 0.0
+        # Polls run in a worker thread; events reach the SSE queues through this loop.
+        self.loop: asyncio.AbstractEventLoop | None = None
         self.event_subscribers: list[asyncio.Queue] = []
 
     @property
@@ -214,10 +216,11 @@ def build_app() -> FastAPI:
         session.base_url = base_url
         session.bot_name = bot_name
         session.connected_at = time.time()
+        session.loop = asyncio.get_running_loop()
         session.polling_loop = PollingLoop(
             client=client,
             checkpoint=session.checkpoint,
-            handler=_dispatch_polled_event,
+            handler=lambda user_id, event: _dispatch_polled_event(user_id, event, client),
             interval_seconds=POLL_INTERVAL_SECONDS,
             # _first_poll sets the checkpoint, so history is never replayed here.
             first_run="replay_history",
@@ -440,25 +443,30 @@ async def _notifications_sse(request: Request) -> AsyncIterator[bytes]:
 
 
 async def _polling_task() -> None:
+    # This connection's objects, captured now: a reconnect replaces the session's,
+    # and a poll still running in its thread must not write into the new ones.
+    client, checkpoint, polling_loop, connected_at = (
+        session.client, session.checkpoint, session.polling_loop, session.connected_at
+    )
     # The first poll waits one interval so it does not compete with the connect
     # check and the first conversation-list read.
     first = True
     while True:
         await asyncio.sleep(POLL_INTERVAL_SECONDS)
         try:
-            if session.client and first:
-                await asyncio.to_thread(_first_poll, session.client, session.connected_at)
+            if client and first:
+                await asyncio.to_thread(_first_poll, client, connected_at, checkpoint)
                 first = False
-            elif session.polling_loop:
+            elif polling_loop:
                 # An API key is bound to one user, so one checkpoint covers every event.
-                await asyncio.to_thread(session.polling_loop.poll_once, POLL_USER)
+                await asyncio.to_thread(polling_loop.poll_once, POLL_USER)
         except asyncio.CancelledError:
             return
         except Exception:
             log.exception("polling tick failed; retrying")
 
 
-def _first_poll(client: ConversationsApiClient, connected_at: float) -> None:
+def _first_poll(client: ConversationsApiClient, connected_at: float, checkpoint: InMemoryCheckpoint) -> None:
     """Set the checkpoint to the newest event, dispatching only events since connect.
 
     Connecting must not replay history as a burst of notifications, but an
@@ -468,11 +476,27 @@ def _first_poll(client: ConversationsApiClient, connected_at: float) -> None:
     events = sorted(EventsPollingClient(client).fetch_page(limit=20).events, key=event_sort_key)
     for event in events:
         if event_sort_key(event)[0] >= connected_at - CONNECT_CLOCK_SKEW_SECONDS:
-            _dispatch_polled_event(POLL_USER, event)
-        session.checkpoint.advance(POLL_USER, event.event_id)
+            _dispatch_polled_event(POLL_USER, event, client)
+        checkpoint.advance(POLL_USER, event.event_id)
 
 
-def _dispatch_polled_event(user_id: str, event: Event) -> None:
+def _dispatch_polled_event(user_id: str, event: Event, client: ConversationsApiClient | None = None) -> None:
+    # Called from the polling thread: hand off to the loop so a waiting SSE
+    # stream wakes now, not at its next heartbeat. The connection check runs on
+    # the loop too, where a reconnect cannot interleave with it.
+    loop = session.loop
+    if loop is None:
+        _deliver(event, client)
+        return
+    try:
+        loop.call_soon_threadsafe(_deliver, event, client)
+    except RuntimeError:
+        pass  # the loop closed: the app is shutting down
+
+
+def _deliver(event: Event, client: ConversationsApiClient | None) -> None:
+    if client is not None and session.client is not client:
+        return  # a poll from a connection that has since been replaced
     for queue in list(session.event_subscribers):
         try:
             queue.put_nowait(event)

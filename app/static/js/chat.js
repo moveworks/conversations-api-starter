@@ -41,6 +41,7 @@ export function addUserBubble(text, into = chatLog, files = []) {
 export function addErrorLine(text) {
   const el = document.createElement("div");
   el.className = "error";
+  el.setAttribute("role", "alert");
   el.textContent = text;
   chatLog.appendChild(el);
   scrollDown();
