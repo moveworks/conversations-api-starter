@@ -1,7 +1,7 @@
 import { renderMarkdown } from "./markdown.js";
 import { toast } from "./toast.js";
-import { sendMessage } from "./chat.js";
-import { fetchModalCached, openModal } from "./modals.js";
+import { replyInProgress, sendMessage } from "./chat.js";
+import { openModal, readModalForName } from "./modals.js";
 
 export function actionChip(action, ref) {
   if (action.type === "URL_ACTION" && action.url) {
@@ -28,6 +28,8 @@ export function actionChip(action, ref) {
   btn.textContent = action.label;
   if (action.type === "CALLBACK_ACTION" && action.callback_id) {
     btn.addEventListener("click", () => {
+      // Also stops a double click from sending the callback twice.
+      if (replyInProgress()) return toast("Wait for the current reply to finish.");
       lockActionRow(btn);
       sendMessage({ callbackId: action.callback_id, echo: action.label });
     });
@@ -58,12 +60,11 @@ export async function renderActions(turn, data) {
   turn.appendChild(row);
 
   // Several forms can arrive as identical "Complete this request" buttons;
-  // the form's name is inside the modal. One fetch at a time, to stay inside
-  // the rate limit.
+  // the form's name is inside the modal.
   for (const [i, action] of data.actions.entries()) {
     if (action.type !== "MODAL_ACTION" || !action.modal_id) continue;
     try {
-      const name = formName(await fetchModalCached({ ...ref, modal_id: action.modal_id }));
+      const name = formName(await readModalForName({ ...ref, modal_id: action.modal_id }, () => chips[i].isConnected));
       if (name) chips[i].textContent = name;
     } catch { /* keep the API's label */ }
   }

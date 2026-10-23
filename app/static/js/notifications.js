@@ -42,8 +42,13 @@ export function connectNotifications() {
     meta.textContent = `${data.created_at || ""} · ${author}`;
     item.append(body, meta);
     if (data.conversation_id) {
-      item.title = "Open this conversation";
-      item.addEventListener("click", () => { $("notif-drawer").hidden = true; openConversation(data.conversation_id); });
+      // The body can hold links, so a button inside the item opens the
+      // conversation rather than making the whole item a button.
+      const open = document.createElement("button");
+      open.type = "button";
+      open.textContent = "Open conversation";
+      open.addEventListener("click", () => { $("notif-drawer").hidden = true; openConversation(data.conversation_id); });
+      meta.append(" · ", open);
     }
     $("notif-list").prepend(item);
     if ($("notif-drawer").hidden) {

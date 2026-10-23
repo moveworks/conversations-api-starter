@@ -12,6 +12,7 @@ from typing import Any, Dict, List
 
 from moveworks_capi.responses import message_actions, message_handoff
 from moveworks_capi.rendering import (
+    citation_body,
     citation_label,
     citation_summary,
     clean_label,
@@ -119,13 +120,13 @@ def present_sources(message: Dict[str, Any]) -> List[Dict[str, str]]:
     sources: List[Dict[str, str]] = []
     seen: set = set()
     for citation in message.get("citations") or []:
-        display = citation.get("display") or {}
         title = citation_label(citation)
         url = citation.get("url") or ""
+        url = url if _is_web_url(url) else ""
         if (title, url) in seen:
             continue
         seen.add((title, url))
-        body = ((display.get("body") or {}).get("markdown_text") or {}).get("text") or ""
+        body = citation_body(citation)
         sources.append({
             "title": title or url or "Source",
             "url": url,
@@ -166,9 +167,17 @@ def present_modal(modal: Dict[str, Any]) -> Dict[str, Any]:
     fields = []
     for field in modal.get("fields") or []:
         field = dict(field)
-        text = (field.get("display") or {}).get("text")
+        display = field.get("display") or {}
+        text = display.get("text")
         if field.get("type") == "DISPLAY" and isinstance(text, dict) and text.get("text"):
-            field["display"] = {**field["display"], "text": {**text, "text": modal_html_to_markdown(text["text"])}}
+            display = {**display, "text": {**text, "text": modal_html_to_markdown(text["text"])}}
+        # Images and downloads load or open from their URL, so only http(s).
+        for kind in ("image", "download"):
+            media = display.get(kind)
+            if field.get("type") == "DISPLAY" and isinstance(media, dict) and not _is_web_url(media.get("url") or ""):
+                display = {**display, kind: {**media, "url": ""}}
+        if display:
+            field["display"] = display
         fields.append(field)
     return {**modal, "title": clean_label(modal.get("title", "")), "fields": fields}
 

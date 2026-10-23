@@ -1,6 +1,6 @@
 # Moveworks Conversations API Starter
 
-Python sample code for the [Moveworks Conversations API](https://docs.moveworks.com/api-reference/conversations-api). It includes a client library, runnable examples for each authentication path, and a reference chat app.
+Python sample code for the [Moveworks Conversations API](https://docs.moveworks.com/api-reference/conversations-api/overview). It includes a client library, runnable examples for each authentication path, and a reference chat app.
 
 > [!NOTE]
 > The Conversations API is in **Controlled Availability**. Endpoints, behaviors, and configuration surfaces may change during CA. Contact your Moveworks account team to participate.
@@ -28,7 +28,7 @@ moveworks_capi/
 ├── errors.py            # Named exceptions
 ├── responses.py         # Build turn input, submit, poll to completion; extract text and actions
 ├── streaming.py         # SSE client for /responses/stream
-├── files.py             # Files API (alpha) upload, for files attached to a turn
+├── files.py             # Files API (alpha) upload, for files attached to a turn or a modal FILE field
 ├── conversations.py     # Create, list, fetch, and update conversations; list messages
 ├── rendering.py         # Helpers for displaying assistant messages in a UI
 ├── auth/                # Okta and Entra ID OIDC (PKCE), self-signed JWT (S2S), HTTP Connector API Key
@@ -201,13 +201,13 @@ The app handles:
 
 The app runs locally with one connected Moveworks instance per process. It binds to `127.0.0.1`, has no login, and rejects requests with a non-local `Host`, cross-origin writes, and non-JSON writes, so other websites cannot drive it through your browser. Do not expose it on a network.
 
-The [demo app](https://github.com/moveworks/conversations-api-demo-app) is a styled build of the same surface, with motion, inline form cards, a protocol inspector, dark mode, and a test-notification panel. To build your own surface, fork this repo.
+The [demo app](https://github.com/moveworks/conversations-api-demo-app) is a styled build of the same surface, with file attachments, inline form cards, a protocol inspector, motion, dark mode, and a test notification form. To build your own surface, fork this repo.
 
 ---
 
 ## Moveworks setup
 
-Before the code in this repo can make calls, your Moveworks instance must be set up for the Conversations API, per the [Conversations API overview](https://docs.moveworks.com/api-reference/conversations-api):
+Before the code in this repo can make calls, your Moveworks instance must be set up for the Conversations API, per the [Conversations API overview](https://docs.moveworks.com/api-reference/conversations-api/overview):
 
 - Your Moveworks account team enables the Conversations API for your Moveworks instance. Requests return `404` until it is enabled.
 - You [create the Conversations API chatbot](https://docs.moveworks.com/api-reference/conversations-api/create-the-chatbot) in Moveworks Setup. Its Bot Name is the `Assistant-Name` header value on every request.
@@ -237,7 +237,7 @@ This repo is sample code, not an official Moveworks SDK. The API is standard RES
 - **Use the `/rest/v1` base path.** `/assistant/v1` is deprecated, and modals are available only on `/rest/v1`. To correlate a request with Moveworks logs, read the `x-trace-id` response header.
 - **Render both `actions` and `Message.handoff`.** Assistant replies can carry an `actions` array (`URL_ACTION`, `CALLBACK_ACTION`, `MODAL_ACTION`, `HANDOFF_ACTION`), which a text-only client drops. `responses.message_actions` normalizes it. `Message.handoff` carries the Get Help menu and can appear on any turn, including during a handoff. Unless the message carries a `HANDOFF_ACTION`, offer it on the newest turn.
 - **Open the handoff menu from a `HANDOFF_ACTION`.** Render its label in its place in the actions row. Pressing it opens a menu built from the same message's `handoff` options and sends nothing. Omit it when the message has no handoff options. The menu is `handoff.handoff_categories[]`, each with a `name`, an optional `description`, and `handoff_items[]`. An `ACTION` item carries a regular `action`; a `TEXT` item carries `text` to display. `responses.message_handoff` normalizes it.
-- **Attribute live agent messages by `actor`.** A `LIVE_AGENT` message is from a human agent. Agent replies arrive on responses of their own, through the events API or a webhook like proactive notifications, and in conversation history. `sender_info.display_name` and the optional `sender_info.avatar_url` give the agent's name and picture for live chats through the ServiceNow integration, when both of these are on: **Agent names and avatars** in your ServiceNow instance (Conversational Interfaces > Settings > Agent Chat > User Chat Settings), and agent impersonation for your Moveworks instance, which Moveworks Support enables. Without `sender_info`, show a generic label such as "Live agent". The agent's name, if any, is in the message text.
+- **Attribute live agent messages by `actor`.** A `LIVE_AGENT` message is from a human agent. Agent replies arrive on responses of their own, through the events API or a webhook like proactive notifications, and in conversation history. `sender_info.display_name` and the optional `sender_info.avatar_url` give the agent's name and picture for live chats through the ServiceNow integration, when both of these are on: **Agent names and avatars** in your ServiceNow instance (Conversational Interfaces > Settings > Agent Chat > User Chat Settings), and **Enable Agent Impersonation** in Moveworks Setup (Ticketing Automation > Handoff > Message Brokering). Without `sender_info`, show a generic label such as "Live agent". The agent's name, if any, is in the message text.
 - **Treat `avatar_url` as external content.** The picture is hosted by the live chat provider, outside the Moveworks API. The app accepts only `https` URLs, loads the image with no referrer, and drops it if it fails to load.
 - **End a live chat with the agent message's action.** The action that ends the chat is the `CALLBACK_ACTION` on a `LIVE_AGENT` message. Identify it by type and actor, since its label can vary and its `callback_id` is opaque.
 - **Detect the end of a live chat from the messages.** The API has no session resource. A `LIVE_AGENT` message without the end-chat action, after earlier ones that carried it, means the agent ended the chat. When the user ends it, the response to the end-chat action completes with no output; see "Re-read history after an empty response" below.
@@ -250,9 +250,9 @@ This repo is sample code, not an official Moveworks SDK. The API is standard RES
 - **Show a `CHOICE` field's `prefill`.** A `CHOICE` field can have no `options` and a server-resolved `prefill`, such as the requesting user.
 - **Treat modal ids as single-use.** Re-read the message for a fresh id rather than reusing one.
 - **Re-read history after an empty response.** Some replies, such as the farewell after "Exit Live Chat", are written to history under an earlier response. When a response completes with no outputs, re-read recent history and use `conversations.replies_after_input` to find them.
-- **Title conversations when you create them.** `ListConversations` returns each `title`, so a conversation list renders from one request. Set the title at creation or with `PATCH`, rather than reading each conversation's messages to build a label.
+- **Conversation titles come with the list.** `ListConversations` returns each `title`, so a conversation list renders from one request. Without a title, the API assigns one generated from the first response; set one at creation or with `PATCH` to control the label.
 - **Serialize reads.** `ListConversations`, history reads, and `/events` polls all count against the same rate limit. Read one at a time and poll at a conservative interval.
-- **Back off on 429.** The shared client backs off with jitter, with or without a `Retry-After` header. For batch work, follow the concurrency guidance in the overview's [practical considerations](https://docs.moveworks.com/api-reference/conversations-api#practical-considerations), test in a small batch first, and ask your Moveworks account team about your limits before sizing a rollout.
+- **Back off on 429.** The shared client backs off with jitter, with or without a `Retry-After` header. For batch work, follow the concurrency guidance in the overview's [practical considerations](https://docs.moveworks.com/api-reference/conversations-api/overview#practical-considerations), test in a small batch first, and ask your Moveworks account team about your limits before sizing a rollout.
 - **Decide what the first poll does.** Polling `/events` without `starting_after` returns events from the user's history. `PollingLoop` takes a `first_run` policy. The default, `"skip_history"`, sets the checkpoint to the newest event and dispatches nothing; `"replay_history"` dispatches the history, oldest first.
 - **Poll `-` for new events.** `EventsPollingClient(client, conversation_id=...)` lists one conversation's events, and `notifications.get_event` fetches one event by id with its real conversation id. Listing one conversation is eventually consistent, so poll `-` for new events, as the [List events reference](https://docs.moveworks.com/api-reference/conversations-api/conversations-api/conversations/list-events) describes.
 - **Branch on error fields.** Every API error carries `status_code`, the body's `error.code`, and `trace_id`. A 401 raises `AuthenticationError`, a 429 raises `RateLimitedError`, and other 4xx responses raise `RequestRejectedError`, including an upload over the size limit (`413`) or one whose content failed validation (`422`). `extract_text` on a `FAILED` response raises `ResponseFailedError`. A mid-stream `ERROR` event raises `StreamError`. A stream that closes before its terminal event raises `StreamClosedError` with the `response_id`, so you can finish with `wait_for_completion`. A stream's `timeout_seconds` is an idle timeout per read.
@@ -292,4 +292,4 @@ See [SUPPORT.md](SUPPORT.md). Questions about your Moveworks instance's Conversa
 
 ## License
 
-[MIT](LICENSE.txt). This repository is sample code, provided as-is. It is not a supported Moveworks product and carries no SLA. Verify against the [Conversations API documentation](https://docs.moveworks.com/api-reference/conversations-api) before using it in production.
+[MIT](LICENSE.txt). This repository is sample code, provided as-is. It is not a supported Moveworks product and carries no SLA. Verify against the [Conversations API documentation](https://docs.moveworks.com/api-reference/conversations-api/overview) before using it in production.

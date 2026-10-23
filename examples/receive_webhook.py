@@ -5,7 +5,7 @@ Usage:
     python examples/receive_webhook.py
 
 Starts a FastAPI receiver bound to ``WEBHOOK_HOST:WEBHOOK_PORT``. On each
-delivery it verifies the RSA signature against the tenant JWKS, deduplicates
+delivery it verifies the RSA signature against the Moveworks instance's JWKS, deduplicates
 against ``webhook-id``, and prints the envelope. Deliveries arrive at
 ``POST /webhooks/moveworks``; ``GET /healthz`` is a health check. Expose the
 receiver publicly (for example, via a tunnel like ngrok or cloudflared) and

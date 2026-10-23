@@ -52,9 +52,20 @@ class TestSecurity:
         resp = local.post("/api/disconnect", content="{}", headers={"Content-Type": "text/plain"})
         assert resp.status_code == 415
 
+    def test_another_local_port_is_a_different_origin(self, local):
+        resp = local.post("/api/disconnect", json={}, headers={"Origin": "http://127.0.0.1:9999"})
+        assert resp.status_code == 403
+
     def test_same_origin_json_post_is_served(self, local):
         resp = local.post("/api/disconnect", json={}, headers={"Origin": "http://127.0.0.1:8090"})
         assert resp.status_code == 200
+
+    def test_page_and_static_files_revalidate(self, local):
+        for path in ("/", "/static/js/chat.js", "/static/styles.css"):
+            assert local.get(path).headers["cache-control"] == "no-cache", path
+
+    def test_api_responses_keep_their_own_headers(self, local):
+        assert "cache-control" not in local.get("/api/session").headers
 
 
 def _form_message() -> dict:
@@ -325,6 +336,29 @@ class TestPresentMessage:
         assert shown["title"] == "📝 New request"
         assert shown["fields"][0]["display"]["text"]["text"] == "Having issues? [Portal](https://example.com)"
         assert shown["fields"][1] == modal["fields"][1]
+
+    def test_citation_links_must_be_web_links(self):
+        message = {"citations": [
+            {"url": "javascript:alert(1)", "display": {"title": {"type": "PLAIN_TEXT", "plain_text": {"text": "Bad"}}}},
+            {"url": "https://example.com/kb", "display": {"title": {"type": "COMMONMARK_TEXT", "commonmark_text": {"text": "Good"}}}},
+        ]}
+
+        sources = present.present_sources(message)
+
+        assert [(s["title"], s["url"]) for s in sources] == [("Bad", ""), ("Good", "https://example.com/kb")]
+
+    def test_modal_images_and_downloads_must_be_web_links(self):
+        modal = {"title": "Form", "fields": [
+            {"type": "DISPLAY", "display": {"image": {"url": "javascript:alert(1)"}}},
+            {"type": "DISPLAY", "display": {"download": {"url": "file:///etc/passwd", "text": "Log"}}},
+            {"type": "DISPLAY", "display": {"download": {"url": "https://example.com/log.txt", "text": "Log"}}},
+        ]}
+
+        fields = present.present_modal(modal)["fields"]
+
+        assert fields[0]["display"]["image"]["url"] == ""
+        assert fields[1]["display"]["download"] == {"url": "", "text": "Log"}
+        assert fields[2]["display"]["download"]["url"] == "https://example.com/log.txt"
 
 
 class TestHistory:

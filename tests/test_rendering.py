@@ -8,6 +8,7 @@ from pathlib import Path
 from moveworks_capi import rendering
 from moveworks_capi.rendering import (
     Segment,
+    citation_body,
     citation_label,
     citation_summary,
     clean_label,
@@ -240,6 +241,18 @@ def test_unresolved_portal_links_stay_unpaired():
 def test_citation_summary_is_the_first_body_line():
     citation = _portal_form_message()["citations"][0]
     assert citation_summary(citation) == "Enroll in or modify your 401(k) plan"
+
+
+def test_citation_text_reads_every_text_type():
+    for kind in ("PLAIN_TEXT", "COMMONMARK_TEXT", "MARKDOWN_TEXT"):
+        key = kind.lower()
+        citation = {"display": {
+            "title": {"type": kind, key: {"text": "**<https://example.com/kb|VPN setup>**"}},
+            "body": {"type": kind, key: {"text": "Install the client.\nThen sign in."}},
+        }}
+        assert citation_label(citation) == "VPN setup", kind
+        assert citation_summary(citation) == "Install the client.", kind
+        assert citation_body(citation) == "Install the client.\nThen sign in.", kind
 
 
 def test_short_link_target_only_requests_moveworks_short_links(monkeypatch):

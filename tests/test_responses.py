@@ -379,3 +379,9 @@ def test_create_response_posts_chat_input() -> None:
     client.post.return_value = _FakeHttpResponse({"response_id": "resp_1", "status": "IN_PROGRESS"})
     assert create_response(client, "conv_1", "hi")["response_id"] == "resp_1"
     client.post.assert_called_once_with("/rest/v1/conversations/conv_1/responses", json={"input": {"chat": {"text": "hi"}}})
+
+
+def test_wait_for_completion_waits_up_to_the_published_120_seconds():
+    import inspect
+
+    assert inspect.signature(responses.wait_for_completion).parameters["timeout_seconds"].default == 120.0

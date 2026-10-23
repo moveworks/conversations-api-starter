@@ -3,7 +3,8 @@ import { $ } from "./dom.js";
 import { scrollDown, stickToBottom } from "./scroll.js";
 import { state } from "./state.js";
 import { toast } from "./toast.js";
-import { addTurn, addUserBubble, chatLog, renderAssistantMessage } from "./chat.js";
+import { addTurn, addUserBubble, chatLog, renderAssistantMessage, resetChat } from "./chat.js";
+import { dropModalReads } from "./modals.js";
 
 const PAGE = 20;
 let showArchived = false;
@@ -52,9 +53,12 @@ function conversationItem(c) {
   const li = document.createElement("li");
   li.className = "conv-item" + (c.conversation_id === state.conversationId ? " active" : "");
   li.dataset.id = c.conversation_id;
-  li.title = c.conversation_id;
-  const preview = document.createElement("div");
+  // The title is a button so the conversation opens from the keyboard too.
+  const preview = document.createElement("button");
+  preview.type = "button";
   preview.className = "conv-title";
+  preview.title = c.conversation_id;
+  preview.addEventListener("click", () => openConversation(c.conversation_id));
   preview.textContent = (c.title || "").trim() || "New conversation";
   const button = (label, fn) => {
     const b = document.createElement("button");
@@ -67,7 +71,6 @@ function conversationItem(c) {
     button("Rename", () => rename(c, preview)),
     button(showArchived ? "Unarchive" : "Archive", () => setArchived(li, c, !showArchived)),
   );
-  li.addEventListener("click", () => openConversation(c.conversation_id));
   return li;
 }
 
@@ -145,6 +148,8 @@ function renderMessages(messages, id, into) {
 }
 
 export async function openConversation(id) {
+  resetChat();
+  dropModalReads();
   state.conversationId = id;
   markActiveConversation();
   if (window.innerWidth <= 1000) $("conv-sidebar").hidden = true;
@@ -156,12 +161,14 @@ export async function openConversation(id) {
   chatLog.appendChild(loading);
   try {
     const { messages, next_cursor: nextCursor } = await getJson(`/api/conversations/${id}/messages`);
+    if (state.conversationId !== id) return; // another conversation was opened meanwhile
     loading.remove();
     renderMessages(messages, id, chatLog);
     if (nextCursor) chatLog.prepend(olderButton(id, nextCursor));
     stickToBottom();
     scrollDown();
   } catch (e) {
+    if (state.conversationId !== id) return;
     loading.replaceChildren();
     loading.className = "error";
     loading.append(`Could not load this conversation. ${e.message || e} `);
@@ -205,6 +212,8 @@ function olderButton(id, cursor) {
 }
 
 export function startNewConversation() {
+  resetChat();
+  dropModalReads();
   state.conversationId = null;
   markActiveConversation();
   chatLog.replaceChildren();

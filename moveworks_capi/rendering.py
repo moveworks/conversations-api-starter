@@ -144,18 +144,19 @@ def citation_label(citation: Dict[str, Any]) -> str:
     and article titles padded with ``\\n\\t\\t:``. Links become their labels,
     bold markers and runs of whitespace go, and the trailing colon is dropped.
     """
-    title = (((citation.get("display") or {}).get("title") or {}).get("markdown_text") or {}).get("text") or ""
+    title = _content_text((citation.get("display") or {}).get("title"))
     title = _SLACK_LINK.sub(lambda m: m.group("label"), title).replace("**", "")
     return " ".join(title.split()).rstrip(": ")
 
 
 def citation_summary(citation: Dict[str, Any]) -> str:
     """The first non-blank line of the citation's body, as plain text."""
-    return next((part.strip() for part in _citation_body(citation).splitlines() if part.strip()), "")
+    return next((part.strip() for part in citation_body(citation).splitlines() if part.strip()), "")
 
 
-def _citation_body(citation: Dict[str, Any]) -> str:
-    return (((citation.get("display") or {}).get("body") or {}).get("markdown_text") or {}).get("text") or ""
+def citation_body(citation: Dict[str, Any]) -> str:
+    """The citation's body text, in whatever text type it arrived."""
+    return _content_text((citation.get("display") or {}).get("body"))
 
 
 @functools.lru_cache(maxsize=512)
@@ -214,7 +215,7 @@ def _matching_citation(match: "re.Match[str]", citations: Any) -> Optional[str]:
     for citation in citations:
         if citation_label(citation) != title or citation_summary(citation) != first_line:
             continue
-        if " ".join(body.split()) in " ".join(_citation_body(citation).split()):
+        if " ".join(body.split()) in " ".join(citation_body(citation).split()):
             return citation.get("citation_id")
     return None
 
@@ -225,7 +226,16 @@ def _paragraph_end(text: str, offset: int) -> int:
 
 
 def _message_text(message: Dict[str, Any]) -> str:
-    content = message.get("content") or {}
+    return _content_text(message.get("content"))
+
+
+def _content_text(content: Any) -> str:
+    """Text of a Content union: plain, CommonMark, or markdown, per its ``type``.
+
+    Citation titles and bodies often omit ``type``; those carry ``markdown_text``.
+    """
+    if not isinstance(content, dict):
+        return ""
     body = content.get((content.get("type") or "").lower()) or content.get("markdown_text") or {}
     text = body.get("text") if isinstance(body, dict) else None
     return text if isinstance(text, str) else ""

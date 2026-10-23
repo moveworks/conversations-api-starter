@@ -4,6 +4,16 @@ All notable changes to this project are recorded here. The project is versioned 
 
 ## Unreleased
 
+- Citation titles and bodies are read from whichever text type they arrive in (`PLAIN_TEXT`, `COMMONMARK_TEXT`, or `MARKDOWN_TEXT`), so labels, snippets, and form matching work when an instance sends CommonMark. `rendering.citation_body` returns a citation's body text.
+- `wait_for_completion` waits up to 120 seconds by default, the time the API allows for a response to reach a terminal state. `check_setup.py` uses the same default.
+- Reference app: a `FAILED` response shows its own message when it carries one, and the generic "could not complete" banner only when it does not.
+- Reference app: action buttons wait while a reply is arriving, which also stops a double click from sending a callback twice. Switching or starting a conversation, or disconnecting, stops the reply in progress so it cannot land in the next conversation, and a conversation opened while another is loading is not overwritten.
+- Reference app: modal reads that name a button run one at a time across the page and are dropped when you leave the conversation, so a long history stays inside the rate limit.
+- Reference app: citation links and modal images and downloads are shown only for `http` and `https` URLs.
+- Reference app: writes are accepted only from the app's own origin, including its port, and the page and static files are served with `Cache-Control: no-cache`.
+- Reference app: conversations and notifications open from the keyboard, screen readers hear each finished reply once, and the modal moves focus to itself and back to the button that opened it.
+- README: `sender_info` also needs **Enable Agent Impersonation** in Moveworks Setup; conversations without a title get one generated from the first response; documentation links point to the Conversations API overview. Examples say Tool Studio.
+
 ## 0.3.0
 
 - `files.upload_file` uploads a file with the Files API (alpha, `POST /rest/v1alpha1/files`) and returns an `UploadedFile`. Pass its `id` in `file_ids` to `create_response` or `stream_response`. The `purpose` field is sent before the `file` part, and the upload is resent only after a 429 or 401, like a turn. A rejected upload raises `RequestRejectedError` with the status, such as `404` when the Files API is not enabled, `413`, or `422`. Before sending, it checks the 100 MB limit and the API's filename rules and refuses empty content, raising `ValueError`. `timeout` overrides the client's per-request timeout for a large file.

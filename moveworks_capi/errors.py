@@ -121,11 +121,11 @@ class InvalidWebhookTimestampError(ConversationsApiError):
 
 
 class UnknownKidError(ConversationsApiError):
-    """The ``webhook-kid`` header referenced a key not present in the tenant JWKS."""
+    """The ``webhook-kid`` header referenced a key not present in the Moveworks instance's JWKS."""
 
 
 class JwksFetchError(ConversationsApiError):
-    """The tenant JWKS could not be fetched or parsed.
+    """The Moveworks instance's JWKS could not be fetched or parsed.
 
     Unlike the verification errors above, this says nothing about the
     delivery itself; answer with a 5xx so the sender retries.

@@ -15,8 +15,9 @@ from .client import ConversationsApiClient
 def create_conversation(client: ConversationsApiClient, *, title: Optional[str] = None) -> Dict[str, Any]:
     """Start a conversation (``POST /rest/v1/conversations``).
 
-    Set ``title`` up front: :func:`list_conversations` returns it, which is what
-    lets a sidebar render from one request (see :func:`update_conversation`).
+    Without ``title``, the API assigns one generated from the first response.
+    :func:`list_conversations` returns titles, so a sidebar renders from one
+    request either way; set one to control the label.
     """
     body: Dict[str, Any] = {}
     if title:
@@ -81,11 +82,8 @@ def update_conversation(
 ) -> Dict[str, Any]:
     """Rename or archive a conversation (``PATCH .../conversations/{id}``).
 
-    Worth doing on the first turn: ``list_conversations`` returns each
-    conversation's ``title``, so a chat surface that titles its conversations
-    can render a full sidebar from ONE request. Leaving titles unset forces a
-    per-conversation history read to synthesize a label, which multiplies
-    reads by the number of rows.
+    ``list_conversations`` returns each conversation's ``title``, so a renamed
+    conversation shows its new label in a sidebar without reading history.
     """
     body: Dict[str, Any] = {}
     if title is not None:

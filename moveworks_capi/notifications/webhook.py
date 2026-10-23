@@ -59,7 +59,7 @@ class WebhookEnvelope:
 
 
 class JwksCache:
-    """Fetches and caches keys from a tenant JWKS endpoint.
+    """Fetches and caches keys from a Moveworks instance's JWKS endpoint.
 
     The cache serves keys by ``kid``. Any lookup for an unknown ``kid``
     triggers a refresh so a newly rotated key is picked up on demand, as
