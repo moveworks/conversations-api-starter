@@ -25,7 +25,11 @@ export function connectNotifications() {
         if (status) addStatusLine(status);
         return;
       }
-      if (data.message.message_id && state.shownMessageIds.has(data.message.message_id)) return;
+      if (data.message.message_id && state.shownMessageIds.has(data.message.message_id)) {
+        // Already in the thread; the event's status is still news.
+        if (status) addStatusLine(status);
+        return;
+      }
       const turn = addTurn("assistant");
       renderAssistantMessage(turn, data.message, data.conversation_id);
       // Follow-ups land in the thread without a reply in flight, so announce them here.

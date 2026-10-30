@@ -2,6 +2,10 @@
 
 All notable changes to this project are recorded here. The project is versioned 0.x, and breaking changes can land in minor versions.
 
+## Unreleased
+
+- Reference app: a consent result for a message already in the open thread still shows its status line.
+
 ## 0.5.0
 
 - `Event` reads the event's `category` (`USER_CONSENT_AUTH`, `LIVE_AGENT`, or None when unclassified), `live_agent_session_state` (`ENDED`), and `consent_operation_type` (`AUTHORIZE` or `REVOKE`). `Event.has_message` says whether the event carries a message, since a live agent session end can arrive without one. `WebhookEnvelope.category` reads a webhook's `data.category`.
