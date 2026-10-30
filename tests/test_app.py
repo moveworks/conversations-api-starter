@@ -808,6 +808,64 @@ class TestNotifications:
         assert [name for name, _ in frames] == ["hello", "notification"]
         assert frames[1][1]["event_id"] == "evt_2"
 
+    def test_a_live_agent_session_end_reaches_the_browser_without_a_message(self):
+        class OpenRequest:
+            async def is_disconnected(self) -> bool:
+                return False
+
+        async def scenario() -> list:
+            stream = cast(AsyncGenerator, server._notifications_sse(cast(Any, OpenRequest())))
+            frames = [await anext(stream)]
+            server.session.event_subscribers[-1].put_nowait(Event.from_json({
+                "event_id": "evt_3", "conversation_id": "conv_1", "created_at": "2026-10-29T23:06:44Z",
+                "category": "LIVE_AGENT", "event_payload": {"live_agent_details": {"session_state": "ENDED"}},
+            }))
+            frames.append(await anext(stream))
+            await stream.aclose()
+            return frames
+
+        _, (name, data) = _frames(asyncio.run(scenario()))
+
+        assert name == "notification"
+        assert data["message"] is None
+        assert data["category"] == "LIVE_AGENT"
+        assert data["live_agent_session_state"] == "ENDED"
+
+    def test_an_unrecognized_session_state_is_dropped_and_a_message_keeps_its_details(self):
+        class OpenRequest:
+            async def is_disconnected(self) -> bool:
+                return False
+
+        def event(event_id: str, payload: dict) -> Event:
+            return Event.from_json({
+                "event_id": event_id, "conversation_id": "conv_1", "created_at": "2026-10-29T23:08:03Z",
+                "category": "LIVE_AGENT", "event_payload": payload,
+            })
+
+        async def scenario() -> list:
+            stream = cast(AsyncGenerator, server._notifications_sse(cast(Any, OpenRequest())))
+            frames = [await anext(stream)]
+            queue = server.session.event_subscribers[-1]
+            queue.put_nowait(event("evt_4", {"live_agent_details": {"session_state": "SOME_FUTURE_STATE"}}))
+            queue.put_nowait(event("evt_5", {
+                "type": "MESSAGE_EVENT",
+                "message": {
+                    "actor": "LIVE_AGENT", "message_id": "msg_5",
+                    "content": {"type": "PLAIN_TEXT", "plain_text": {"text": "The agent has ended the chat."}},
+                },
+                "live_agent_details": {"session_state": "ENDED"},
+            }))
+            frames.append(await anext(stream))
+            await stream.aclose()
+            return frames
+
+        _, (name, data) = _frames(asyncio.run(scenario()))
+
+        assert name == "notification"
+        assert data["event_id"] == "evt_5"
+        assert data["message"]["message_id"] == "msg_5"
+        assert data["live_agent_session_state"] == "ENDED"
+
     def test_polled_events_reach_every_subscriber(self):
         queues = [asyncio.Queue(), asyncio.Queue()]
         server.session.event_subscribers.extend(queues)

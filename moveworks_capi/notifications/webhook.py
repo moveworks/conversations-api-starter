@@ -48,6 +48,11 @@ class WebhookEnvelope:
     timestamp: str
     data: Dict[str, Any]
 
+    @property
+    def category(self) -> Optional[str]:
+        """``data.category``, such as ``"USER_CONSENT_AUTH"``; None when unclassified."""
+        return self.data.get("category")
+
     @classmethod
     def from_dict(cls, obj: Dict[str, Any]) -> "WebhookEnvelope":
         return cls(

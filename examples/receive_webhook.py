@@ -89,7 +89,7 @@ def _build_app() -> FastAPI:
 
         print(
             f"webhook id={envelope.id} type={envelope.type} "
-            f"user={envelope.data.get('user_id')} at={envelope.timestamp}"
+            f"user={envelope.data.get('user_id')} category={envelope.category} at={envelope.timestamp}"
         )
         return {"received": True}
 

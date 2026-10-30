@@ -2,11 +2,13 @@ import { $ } from "./dom.js";
 import { renderMarkdown } from "./markdown.js";
 import { scrollDown } from "./scroll.js";
 import { state } from "./state.js";
-import { addTurn, renderAssistantMessage } from "./chat.js";
+import { addStatusLine, addTurn, renderAssistantMessage } from "./chat.js";
 import { openConversation } from "./conversations.js";
 
 let source = null;
 let unread = 0;
+// One consent can produce several AUTHORIZE events; the first marks completion.
+const authorizedConversations = new Set();
 
 export function connectNotifications() {
   closeNotifications();
@@ -17,24 +19,30 @@ export function connectNotifications() {
     // events on the SAME conversation after the response already completed.
     // Those belong in the thread; only other conversations' events are
     // notifications.
+    const status = statusText(data);
     if (data.conversation_id && data.conversation_id === state.conversationId) {
-      if (data.message?.message_id && state.shownMessageIds.has(data.message.message_id)) return;
+      if (!data.message) {
+        if (status) addStatusLine(status);
+        return;
+      }
+      if (data.message.message_id && state.shownMessageIds.has(data.message.message_id)) return;
       const turn = addTurn("assistant");
       renderAssistantMessage(turn, data.message, data.conversation_id);
       // Follow-ups land in the thread without a reply in flight, so announce them here.
       $("reply-status").textContent = turn.querySelector(".bubble")?.textContent || "";
       scrollDown();
+      if (data.live_agent_session_state === "ENDED") addStatusLine(status);
       return;
     }
     $("notif-empty").hidden = true;
     const item = document.createElement("div");
     item.className = "notif-item";
     const body = document.createElement("div");
-    renderMarkdown(body, data.text || "(no text)");
+    renderMarkdown(body, data.text || status || "(no text)");
     const meta = document.createElement("div");
     meta.className = "muted";
     const author = data.actor === "LIVE_AGENT" ? (data.message?.sender?.display_name || "Live agent") : (data.actor || "");
-    meta.textContent = `${data.created_at || ""} · ${author}`;
+    meta.textContent = [data.created_at, author, data.message ? status : ""].filter(Boolean).join(" · ");
     item.append(body, meta);
     if (data.conversation_id) {
       // The body can hold links, so a button inside the item opens the
@@ -52,6 +60,19 @@ export function connectNotifications() {
       $("notif-badge").hidden = false;
     }
   });
+}
+
+// Read from the event's category details, never from the message text.
+function statusText(data) {
+  if (data.live_agent_session_state === "ENDED") return "Live agent chat ended";
+  if (data.category !== "USER_CONSENT_AUTH") return "";
+  if (data.consent_operation_type === "AUTHORIZE") {
+    if (authorizedConversations.has(data.conversation_id)) return "";
+    authorizedConversations.add(data.conversation_id);
+    return "Account connected";
+  }
+  if (data.consent_operation_type === "REVOKE") return "Account disconnected";
+  return "";
 }
 
 export function closeNotifications() {

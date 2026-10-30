@@ -21,6 +21,7 @@ pre { overflow-x: auto; padding: 8px; background: #eef0f3; border-radius: 6px; }
 a { color: #0b5cd5; }
 .muted { color: #656d76; }
 .error { color: #b42318; margin: 8px 0; }
+.status-line { color: #656d76; font-size: 0.875em; text-align: center; margin: 8px 0 16px; }
 .note { padding: 8px; background: #eef0f3; border-radius: 6px; }
 .field { display: block; margin-bottom: 14px; }
 .field > span { display: block; font-weight: 600; margin-bottom: 4px; }

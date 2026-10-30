@@ -29,6 +29,7 @@ from moveworks_capi.errors import (
 )
 from moveworks_capi.notifications.webhook import (
     JwksCache,
+    WebhookEnvelope,
     WebhookVerifier,
     build_signing_string,
 )
@@ -114,6 +115,14 @@ class TestSignatureVerifier:
         )
         assert envelope.id == signed_delivery["webhook_id"]
         assert envelope.data["user_id"] == "u1"
+        assert envelope.category is None
+
+    def test_envelope_exposes_the_category(self) -> None:
+        envelope = WebhookEnvelope.from_dict(
+            {"id": "evt_1", "type": "CONVERSATION_RESPONSE_RECEIVED", "timestamp": "2026-10-29T23:12:29Z",
+             "data": {"user_id": "u1", "conversation_id": "conv_1", "category": "USER_CONSENT_AUTH"}}
+        )
+        assert envelope.category == "USER_CONSENT_AUTH"
 
     def test_rejects_tampered_body(self, signed_delivery: dict) -> None:
         tampered = signed_delivery["body"].replace(b'"u1"', b'"attacker"')
