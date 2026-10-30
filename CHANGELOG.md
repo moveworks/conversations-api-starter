@@ -6,7 +6,7 @@ All notable changes to this project are recorded here. The project is versioned 
 
 - `Event` reads the event's `category` (`USER_CONSENT_AUTH`, `LIVE_AGENT`, or None when unclassified), `live_agent_session_state` (`ENDED`), and `consent_operation_type` (`AUTHORIZE` or `REVOKE`). `Event.has_message` says whether the event carries a message, since a live agent session end can arrive without one. `WebhookEnvelope.category` reads a webhook's `data.category`.
 - `poll_events.py` and `receive_webhook.py` print the category and details.
-- Reference app: when a live agent chat ends in the open conversation, the thread shows "Live agent chat ended", whether or not the event carries a message. Notifications in the list are labeled "Account connected" (the first `AUTHORIZE` in a conversation since its last `REVOKE`) or "Account disconnected" from the event's consent details.
+- Reference app: when a live agent chat ends in the open conversation, the thread shows "Live agent chat ended", whether or not the event carries a message. Consent results read from the event's details show as "Account connected" (the first `AUTHORIZE` in a conversation since its last `REVOKE`) or "Account disconnected": a line in the open thread, or a label in the notifications list.
 - README: usage note on routing events by `category`.
 
 ## 0.4.0

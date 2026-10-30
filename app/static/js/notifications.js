@@ -31,8 +31,8 @@ export function connectNotifications() {
       // Follow-ups land in the thread without a reply in flight, so announce them here.
       const spoken = turn.querySelector(".bubble")?.textContent || "";
       scrollDown();
-      if (data.live_agent_session_state === "ENDED") addStatusLine(status, { announce: false });
-      $("reply-status").textContent = [spoken, data.live_agent_session_state === "ENDED" ? status : ""].filter(Boolean).join(" ");
+      if (status) addStatusLine(status, { announce: false });
+      $("reply-status").textContent = [spoken, status].filter(Boolean).join(" ");
       return;
     }
     $("notif-empty").hidden = true;
@@ -83,6 +83,7 @@ export function closeNotifications() {
   if (source) source.close();
   source = null;
   unread = 0;
+  authorizedConversations.clear();
   $("notif-badge").hidden = true;
 }
 
