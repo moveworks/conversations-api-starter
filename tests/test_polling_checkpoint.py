@@ -235,3 +235,44 @@ class TestEventReads:
         event = get_event(client, "conv_1", "evt_1")
         client.get.assert_called_once_with("/rest/v1/conversations/conv_1/events/evt_1")
         assert (event.event_id, event.message_actor) == ("evt_1", "ASSISTANT")
+
+
+class TestEventCategories:
+    @staticmethod
+    def _parse(payload: dict, category: str | None = None) -> Event:
+        obj = {"event_id": "evt_1", "conversation_id": "conv_1", "created_at": "2026-10-29T23:06:44Z", "event_payload": payload}
+        if category:
+            obj["category"] = category
+        return Event.from_json(obj)
+
+    def test_a_live_agent_session_end_carries_only_its_state(self):
+        event = self._parse({"live_agent_details": {"session_state": "ENDED"}}, "LIVE_AGENT")
+
+        assert event.category == "LIVE_AGENT"
+        assert event.live_agent_session_state == "ENDED"
+        assert not event.has_message
+        assert event.payload_type == ""
+        assert event.content_text is None
+
+    def test_a_consent_event_reports_its_operation(self):
+        event = self._parse(
+            {
+                "type": "MESSAGE_EVENT",
+                "message": {"actor": "ASSISTANT", "content": {"type": "MARKDOWN_TEXT", "markdown_text": {"text": "Done."}}},
+                "user_consent_auth_details": {"operation_type": "REVOKE"},
+            },
+            "USER_CONSENT_AUTH",
+        )
+
+        assert event.category == "USER_CONSENT_AUTH"
+        assert event.consent_operation_type == "REVOKE"
+        assert event.has_message
+        assert event.content_text == "Done."
+
+    def test_an_unclassified_event_has_no_category_or_details(self):
+        event = self._parse({"type": "MESSAGE_EVENT", "message": {"actor": "ASSISTANT"}})
+
+        assert event.category is None
+        assert event.live_agent_session_state is None
+        assert event.consent_operation_type is None
+        assert event.has_message

@@ -107,10 +107,16 @@ def _build_bearer(base_url: str) -> tuple[Callable[[], str], str]:
 
 
 def _handle_event(user_id: str, event: Event) -> None:
-    text = event.content_text or "<no text>"
+    details = [
+        f"category={event.category}" if event.category else "",
+        f"session_state={event.live_agent_session_state}" if event.live_agent_session_state else "",
+        f"operation_type={event.consent_operation_type}" if event.consent_operation_type else "",
+    ]
+    text = event.content_text or ("<no message>" if not event.has_message else "<no text>")
     print(
         f"[{event.created_at}] user={user_id} conv={event.conversation_id} "
-        f"actor={event.message_actor} event={event.event_id}\n  {text}"
+        f"actor={event.message_actor} event={event.event_id} {' '.join(d for d in details if d)}".rstrip()
+        + f"\n  {text}"
     )
 
 

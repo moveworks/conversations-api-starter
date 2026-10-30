@@ -422,9 +422,9 @@ async def _notifications_sse(request: Request) -> AsyncIterator[bytes]:
             except asyncio.TimeoutError:
                 yield sse_frame("heartbeat", {})
                 continue
+            if not event.has_message and event.live_agent_session_state != "ENDED":
+                continue  # nothing to show; an unrecognized state means no change
             message = (event.raw.get("event_payload") or {}).get("message") or {}
-            if not message:
-                continue  # nothing to show in the list
             yield sse_frame(
                 "notification",
                 {
@@ -435,7 +435,10 @@ async def _notifications_sse(request: Request) -> AsyncIterator[bytes]:
                     "text": normalize_markup(event.content_text or ""),
                     # The whole message, so a same-conversation follow-up keeps
                     # its buttons, sources, feedback, and live agent attribution.
-                    "message": await asyncio.to_thread(present_message, message),
+                    "message": await asyncio.to_thread(present_message, message) if message else None,
+                    "category": event.category,
+                    "live_agent_session_state": event.live_agent_session_state,
+                    "consent_operation_type": event.consent_operation_type,
                 },
             )
     finally:

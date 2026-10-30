@@ -45,6 +45,7 @@ class Event:
     event_id: str
     conversation_id: str
     created_at: str
+    # Deprecated in the API, and empty on an event with no message; use has_message.
     payload_type: str
     # "ASSISTANT" for bot replies; "LIVE_AGENT" when a human agent's message
     # arrives during a live agent session; "USER" echoes are possible too.
@@ -52,6 +53,19 @@ class Event:
     content_type: Optional[str]
     content_text: Optional[str]
     raw: Dict[str, Any]
+    # Where the event came from, such as "USER_CONSENT_AUTH" or "LIVE_AGENT".
+    # None when unclassified; treat None or an unrecognized value as an
+    # ordinary assistant message.
+    category: Optional[str] = None
+    # "ENDED" when a live agent session ends. Such an event may carry no message.
+    live_agent_session_state: Optional[str] = None
+    # "AUTHORIZE" (consent completed, also on the resumed request) or "REVOKE".
+    consent_operation_type: Optional[str] = None
+
+    @property
+    def has_message(self) -> bool:
+        """Whether the event carries a message, read from ``raw``. Some events carry only details."""
+        return bool((self.raw.get("event_payload") or {}).get("message"))
 
     @classmethod
     def from_json(cls, obj: Dict[str, Any]) -> "Event":
@@ -73,6 +87,9 @@ class Event:
             content_type=content_type,
             content_text=content_text,
             raw=obj,
+            category=obj.get("category"),
+            live_agent_session_state=(payload.get("live_agent_details") or {}).get("session_state"),
+            consent_operation_type=(payload.get("user_consent_auth_details") or {}).get("operation_type"),
         )
 
 

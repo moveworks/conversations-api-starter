@@ -38,6 +38,17 @@ export function addUserBubble(text, into = chatLog, files = []) {
   scrollDown();
 }
 
+// A line in the thread that reports a change rather than a message, such as
+// a live agent chat ending.
+export function addStatusLine(text, { announce = true } = {}) {
+  const el = document.createElement("div");
+  el.className = "status-line";
+  el.textContent = text;
+  chatLog.appendChild(el);
+  if (announce) $("reply-status").textContent = text;
+  scrollDown();
+}
+
 export function addErrorLine(text) {
   const el = document.createElement("div");
   el.className = "error";
