@@ -866,6 +866,37 @@ class TestNotifications:
         assert data["message"]["message_id"] == "msg_5"
         assert data["live_agent_session_state"] == "ENDED"
 
+    def test_consent_details_reach_the_browser(self):
+        class OpenRequest:
+            async def is_disconnected(self) -> bool:
+                return False
+
+        async def scenario() -> list:
+            stream = cast(AsyncGenerator, server._notifications_sse(cast(Any, OpenRequest())))
+            frames = [await anext(stream)]
+            server.session.event_subscribers[-1].put_nowait(Event.from_json({
+                "event_id": "evt_6", "conversation_id": "conv_1", "created_at": "2026-10-29T23:14:16Z",
+                "category": "USER_CONSENT_AUTH",
+                "event_payload": {
+                    "type": "MESSAGE_EVENT",
+                    "message": {
+                        "actor": "ASSISTANT", "message_id": "msg_6",
+                        "content": {"type": "PLAIN_TEXT", "plain_text": {"text": "The lookup finished."}},
+                    },
+                    "user_consent_auth_details": {"operation_type": "AUTHORIZE"},
+                },
+            }))
+            frames.append(await anext(stream))
+            await stream.aclose()
+            return frames
+
+        _, (name, data) = _frames(asyncio.run(scenario()))
+
+        assert name == "notification"
+        assert data["category"] == "USER_CONSENT_AUTH"
+        assert data["consent_operation_type"] == "AUTHORIZE"
+        assert data["live_agent_session_state"] is None
+
     def test_polled_events_reach_every_subscriber(self):
         queues = [asyncio.Queue(), asyncio.Queue()]
         server.session.event_subscribers.extend(queues)

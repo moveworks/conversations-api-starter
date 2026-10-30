@@ -29,9 +29,10 @@ export function connectNotifications() {
       const turn = addTurn("assistant");
       renderAssistantMessage(turn, data.message, data.conversation_id);
       // Follow-ups land in the thread without a reply in flight, so announce them here.
-      $("reply-status").textContent = turn.querySelector(".bubble")?.textContent || "";
+      const spoken = turn.querySelector(".bubble")?.textContent || "";
       scrollDown();
-      if (data.live_agent_session_state === "ENDED") addStatusLine(status);
+      if (data.live_agent_session_state === "ENDED") addStatusLine(status, { announce: false });
+      $("reply-status").textContent = [spoken, data.live_agent_session_state === "ENDED" ? status : ""].filter(Boolean).join(" ");
       return;
     }
     $("notif-empty").hidden = true;
@@ -71,7 +72,10 @@ function statusText(data) {
     authorizedConversations.add(data.conversation_id);
     return "Account connected";
   }
-  if (data.consent_operation_type === "REVOKE") return "Account disconnected";
+  if (data.consent_operation_type === "REVOKE") {
+    authorizedConversations.delete(data.conversation_id);
+    return "Account disconnected";
+  }
   return "";
 }
 
