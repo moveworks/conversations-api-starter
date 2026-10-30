@@ -63,6 +63,8 @@ Requires Python 3.10 or later and a Moveworks instance set up for the Conversati
 
    On an older Python, the install in the next step fails with `File "setup.py" or "setup.cfg" not found`. Install Python 3.10 or later and create the virtual environment with it.
 
+   On Windows, use `py` in place of `python3`, and activate with `.venv\Scripts\activate` in Command Prompt or `.venv\Scripts\Activate.ps1` in PowerShell. If PowerShell blocks the script, run `Set-ExecutionPolicy -Scope Process RemoteSigned` in that window first.
+
 3. Install the library and the examples. This is an editable install, so changes you make to `moveworks_capi/` take effect without reinstalling.
 
    ```bash
@@ -81,11 +83,15 @@ Requires Python 3.10 or later and a Moveworks instance set up for the Conversati
    cp .env.example .env
    ```
 
+   In Windows Command Prompt, use `copy` in place of `cp`.
+
 6. Check your setup. The script confirms your environment variables, authentication, and a full round trip, and names the likely cause of any failure.
 
    ```bash
    python examples/check_setup.py
    ```
+
+   If calls fail with `CERTIFICATE_VERIFY_FAILED` on a network that inspects TLS traffic, set the `REQUESTS_CA_BUNDLE` environment variable in your shell to the path of a PEM file containing your company's root CA certificate.
 
 7. Make a first call. Each hello-call script creates a conversation, sends a message, and prints the reply and its actions. Use the one for your auth path: `s2s_jwt_call.py`, `okta_call.py`, `entra_call.py`, or `api_key_call.py`.
 
