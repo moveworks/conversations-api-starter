@@ -20,14 +20,7 @@ export function connectNotifications() {
     if (data.conversation_id && data.conversation_id === state.conversationId) {
       if (data.message?.message_id && state.shownMessageIds.has(data.message.message_id)) return;
       const turn = addTurn("assistant");
-      if (data.message) {
-        renderAssistantMessage(turn, data.message, data.conversation_id);
-      } else {
-        const bubble = document.createElement("div");
-        bubble.className = "bubble";
-        renderMarkdown(bubble, data.text || "");
-        turn.appendChild(bubble);
-      }
+      renderAssistantMessage(turn, data.message, data.conversation_id);
       // Follow-ups land in the thread without a reply in flight, so announce them here.
       $("reply-status").textContent = turn.querySelector(".bubble")?.textContent || "";
       scrollDown();

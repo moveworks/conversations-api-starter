@@ -2,8 +2,11 @@
 
 All notable changes to this project are recorded here. The project is versioned 0.x, and breaking changes can land in minor versions.
 
-## Unreleased
+## 0.4.0
 
+- Reference app: events that carry no message are left out of the notifications list.
+- Reference app: while a form is open, the rest of the page is inert, so Tab and screen readers stay inside the form.
+- README: Windows commands for the virtual environment and the `.env` copy, and `REQUESTS_CA_BUNDLE` for networks that inspect TLS traffic.
 - Reference app: the screen-reader status line is fixed in place, so a long conversation cannot make the whole page scroll past the app.
 - Reference app: a poll still running from a previous connection does not write into the new one, and a polled notification reaches the browser as soon as the poll returns, rather than at the stream's next heartbeat.
 - Reference app: a conversation opened twice, or while another is loading, renders once. The custom base URL field takes part in the connect form only while it is shown. A vote from either feedback button closes an open comment box. Screen readers also hear follow-ups that arrive in the open conversation, and error lines.
