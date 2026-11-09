@@ -1,6 +1,6 @@
 # Working in this repo (for AI coding assistants)
 
-This repo is sample code for the Moveworks Conversations API: a client library (`moveworks_capi/`), runnable examples (`examples/`), and a reference web app (`app/`). `README.md` describes the layout. Follow these rules when helping someone build on it.
+This repo is sample code for the Moveworks Conversations API: a client library (`moveworks_capi/`), runnable examples (`examples/`), a reference web app (`app/`), and an example MCP server (`mcp_server/`). `README.md` describes the layout. Follow these rules when helping someone build on it.
 
 ## Start here
 
@@ -31,6 +31,7 @@ These are not implemented in this repo or not available in the API. Say so rathe
 - An attach control or modal `FILE` fields in the reference app (the library uploads with `files.upload_file`; a `FILE` value is `{"files": [{"file_id": ...}]}`)
 - A client-initiated Get Help menu (the API offers it only when the assistant does)
 - Specific rate limits for a Moveworks instance (the docs give starting guidance, and the account team provides the limits)
+- Live agent chat, the Get Help menu, file upload, or modal refresh through `mcp_server/` (it reports them as notes or returns the portal link)
 
 ## When the API changes
 

@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "moveworks": {
+      "type": "http",
+      "url": "${MOVEWORKS_MCP_URL:-http://127.0.0.1:8791/mcp}",
+      "headers": {
+        "Authorization": "Bearer ${MOVEWORKS_MCP_TOKEN}"
+      }
+    }
+  }
+}
