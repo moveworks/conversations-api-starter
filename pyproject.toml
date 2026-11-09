@@ -45,15 +45,20 @@ app = [
   "fastapi>=0.110,<1",
   "uvicorn>=0.29,<1",
 ]
+mcp = [
+  "mcp>=2.3,<3",
+  "uvicorn>=0.29,<1",
+]
 test = [
-  "moveworks-capi-starter[app]",
+  "moveworks-capi-starter[app,mcp]",
   "pytest>=8",
   # Starlette's TestClient uses httpx2 where supported and httpx on older releases.
   "httpx>=0.27",
   "httpx2>=2.13",
 ]
 
-# The wheel ships only the library; the reference app runs from a checkout (`python -m app`).
+# The wheel ships only the library; the reference app and the MCP server run from a checkout
+# (`python -m app`, `python -m mcp_server`).
 [tool.setuptools.packages.find]
 include = ["moveworks_capi*"]
 
@@ -72,6 +77,6 @@ extend-exclude = ["build"]
 select = ["E", "F", "B", "W"]
 
 [tool.pyright]
-include = ["moveworks_capi", "app", "examples", "tests"]
+include = ["moveworks_capi", "app", "mcp_server", "examples", "tests"]
 typeCheckingMode = "basic"
 pythonVersion = "3.10"

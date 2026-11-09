@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "moveworks": {
+      "httpUrl": "http://127.0.0.1:8791/mcp",
+      "headers": {
+        "Authorization": "Bearer dev:<roster email>"
+      },
+      "timeout": 120000
+    }
+  }
+}
