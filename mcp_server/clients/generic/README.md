@@ -39,6 +39,30 @@ python mcp_server/clients/generic/mcp_chat.py call choose_moveworks_option \
 
 `--url` (or `MOVEWORKS_MCP_URL`) points it at a deployed server. The script is also the starting point for your own Python client: it connects with the `mcp` 2.x SDK (`streamable_http_client` with an `httpx2.AsyncClient` that carries the `Authorization` header) and reads each result's `structured_content`.
 
+## Demo sign-in for OAuth-only clients
+
+Some clients, such as the Gemini app and ChatGPT, only connect to servers that sign users in with OAuth and only reach public HTTPS URLs. For a demo without your identity provider, run the server in `demo_oauth` mode behind a tunnel. Every token then acts as `MCP_DEV_USER_EMAIL`, so use a test user in a non-production Moveworks instance.
+
+1. Add the demo settings to `.env`. This mode also needs the self-signed JWT settings (`MW_S2S_*`).
+
+   ```bash
+   MCP_DEV_USER_EMAIL=<roster email>
+   MCP_DEMO_OAUTH_CLIENT_ID=<any string>
+   MCP_DEMO_OAUTH_CLIENT_SECRET=<a long random string>
+   MCP_DEMO_OAUTH_PASSPHRASE=<what you'll type on the sign-in page>
+   MCP_DEMO_OAUTH_SIGNING_KEY=<a long random string>
+   ```
+
+   `python -c "import secrets; print(secrets.token_urlsafe(32))"` makes a random string.
+
+2. Start a tunnel to port 8791 with any tunnel tool that gives a public HTTPS URL, then start the server with that URL:
+
+   ```bash
+   mcp_server/clients/generic/demo_up.sh https://<public host>
+   ```
+
+   The script sets `MCP_AUTH_MODE=demo_oauth`, `MCP_PUBLIC_BASE_URL`, and `MCP_ALLOWED_HOSTS`. The server still binds only to localhost; the tunnel forwards to it. Anyone with the URL, client secret, and passphrase acts as `MCP_DEV_USER_EMAIL`, and the sign-in page doesn't limit attempts, so use a long passphrase and stop the tunnel when the demo ends.
+
 ## Deploying
 
 - Serve HTTPS with a publicly trusted certificate. Most remote clients reject localhost and self-signed certificates.

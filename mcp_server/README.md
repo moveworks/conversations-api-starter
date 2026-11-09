@@ -1,6 +1,6 @@
 # MCP server example
 
-An example [Model Context Protocol](https://modelcontextprotocol.io) server that puts the Moveworks assistant behind MCP tools. An MCP client such as Claude Code, the Gemini app, or Gemini CLI calls the tools, and the server calls the Conversations API as the signed-in user, so answers, tickets, and requests are that user's own.
+An example [Model Context Protocol](https://modelcontextprotocol.io) server that puts the Moveworks assistant behind MCP tools. An MCP client such as Claude Code, ChatGPT, the Gemini app, or Gemini CLI calls the tools, and the server calls the Conversations API as the signed-in user, so answers, tickets, and requests are that user's own.
 
 ```
 MCP client ──MCP (StreamableHTTP)──▶ mcp_server ──/rest/v1──▶ Moveworks
@@ -12,8 +12,9 @@ You host and operate this server; Moveworks does not host it. Like the rest of t
 
 | Folder | For |
 |---|---|
-| [`clients/generic/`](clients/generic/) | Any MCP client: the endpoint, sign-in, the tool contract, and a script that calls the tools |
+| [`clients/generic/`](clients/generic/) | Any MCP client: the endpoint, sign-in, the tool contract, a script that calls the tools, and the demo sign-in for OAuth-only clients |
 | [`clients/claude-code/`](clients/claude-code/) | Claude Code |
+| [`clients/chatgpt/`](clients/chatgpt/) | ChatGPT |
 | [`clients/gemini/`](clients/gemini/) | The Gemini app, Gemini CLI, and notes for Gemini Enterprise |
 
 ---
@@ -59,7 +60,7 @@ Set `MCP_AUTH_MODE`:
 | `google_s2s` | The client signs users in with Google. The server verifies the token (its audience must be in `MCP_GOOGLE_OAUTH_CLIENT_IDS`, its email in `MCP_ALLOWED_EMAIL_DOMAINS`) and acts as that email with a self-signed JWT credential. That credential can act as any roster user, so these checks are the only boundary: set the OAuth consent screen to Internal so only your Google Workspace accounts can sign in, and keep the private key in a secret store |
 | `dev_static` | Local testing: every call acts as `MCP_DEV_USER_EMAIL` |
 | `dev_static_map` | Local testing: `Bearer dev:<email>` acts as that roster user, so one server can serve two users |
-| `demo_oauth` | Demos with clients that only accept OAuth, such as the Gemini app. A built-in OAuth 2.1 server with a passphrase sign-in page; every token acts as `MCP_DEV_USER_EMAIL`. Never put it in front of a production Moveworks instance |
+| `demo_oauth` | Demos with clients that only accept OAuth, such as the Gemini app and ChatGPT. A built-in OAuth 2.1 server with a passphrase sign-in page; every token acts as `MCP_DEV_USER_EMAIL`. Never put it in front of a production Moveworks instance |
 
 The `dev_*` and `demo_oauth` modes use the self-signed JWT settings (`MW_S2S_*`) and refuse to bind anything but localhost. The `dev_*` modes also refuse to start when `MCP_ALLOWED_HOSTS` or `MCP_PUBLIC_BASE_URL` is set: anyone who reaches them can act as any roster user. A tunnel makes a localhost server public, so tunnel only `demo_oauth`, and stop the tunnel when the demo ends.
 
@@ -102,7 +103,7 @@ python -m mcp_server
 MOVEWORKS_MCP_TOKEN="dev:<roster email>" python mcp_server/clients/generic/mcp_chat.py list
 ```
 
-It listens on `http://127.0.0.1:8791/mcp`. Then connect a client: [Claude Code](clients/claude-code/), [Gemini](clients/gemini/), or [any MCP client](clients/generic/).
+It listens on `http://127.0.0.1:8791/mcp`. Then connect a client: [Claude Code](clients/claude-code/), [ChatGPT](clients/chatgpt/), [Gemini](clients/gemini/), or [any MCP client](clients/generic/).
 
 ## Settings
 
@@ -125,7 +126,7 @@ The server reads the environment and `.env`. Values already in the environment w
 | `MCP_REQUIRE_TOKEN_FOR_LISTING` | `false` | Require a token for `initialize` and `tools/list` too |
 | `MCP_OAUTH_ISSUER`, `MCP_OAUTH_SCOPES` | | `idp_exchange` and `google_s2s`: see [Point clients at your identity provider](#point-clients-at-your-identity-provider) |
 | `MCP_PUBLIC_BASE_URL` | | The server's public https origin, for OAuth discovery (`MCP_OAUTH_ISSUER` or `demo_oauth`) |
-| `MCP_DEMO_OAUTH_*` | | `demo_oauth` only; see [`clients/gemini/`](clients/gemini/) |
+| `MCP_DEMO_OAUTH_*` | | `demo_oauth` only; see [Demo sign-in for OAuth-only clients](clients/generic/README.md#demo-sign-in-for-oauth-only-clients) |
 
 ## Layout
 
