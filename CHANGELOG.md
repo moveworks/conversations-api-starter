@@ -4,7 +4,7 @@ All notable changes to this project are recorded here. The project is versioned 
 
 ## Unreleased
 
-- `mcp_server/`: an example MCP server that exposes the assistant as tools (`ask_moveworks`, `choose_moveworks_option`, `open_moveworks_form`, `submit_moveworks_form`, `get_moveworks_result`), with setup for Claude Code, the Gemini app, Gemini CLI, and other MCP clients. `MCP_OAUTH_ISSUER` publishes OAuth discovery metadata that points MCP clients at your Okta, Entra ID, or Google sign-in. Install with `pip install -e ".[mcp]"` and run `python -m mcp_server`.
+- `mcp_server/`: an example MCP server that exposes the assistant as tools (`ask_moveworks`, `choose_moveworks_option`, `open_moveworks_form`, `submit_moveworks_form`, `get_moveworks_result`), with setup for Claude Code, ChatGPT, the Gemini app, Gemini CLI, and other MCP clients. `MCP_OAUTH_ISSUER` publishes OAuth discovery metadata that points MCP clients at your Okta, Entra ID, or Google sign-in. Install with `pip install -e ".[mcp]"` and run `python -m mcp_server`.
 - Reference app: a consent result for a message already in the open thread still shows its status line.
 
 ## 0.5.0

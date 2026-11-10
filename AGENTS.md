@@ -6,7 +6,7 @@ This repo is sample code for the Moveworks Conversations API: a client library (
 
 1. **Confirm the Moveworks instance setup before writing code.** Run `python examples/check_setup.py`. It checks environment variables, reachability, auth, and a full round trip, and names the likely cause of a failure. Most failures come from setup: the API not enabled (404 on every call), no chatbot or a wrong Bot Name, a credential that does not match, or a user who does not resolve against the roster.
 2. **Use the public docs for API behavior.** The [Conversations API documentation](https://docs.moveworks.com/api-reference/conversations-api/overview) is the source of truth. When it disagrees with this repo or with anything you recall, follow the docs.
-3. **Start from working code.** For a chat surface, run the reference app (`python -m app`) and adapt it. For a backend, start from the example for the auth path (README, "Choose a starting point").
+3. **Start from working code.** For a chat surface, run the reference app (`python -m app`) and adapt it. For a backend, start from the example for the auth path (README, "Choose a starting point"). For tools in an AI client, start from the MCP server (`python -m mcp_server`; see `mcp_server/README.md`).
 
 ## Rules
 
@@ -23,9 +23,18 @@ This repo is sample code for the Moveworks Conversations API: a client library (
 - **Never commit secrets.** `.env`, `*.pem`, and `checkpoints/` are ignored; keep them that way. API keys stay in server memory, never in browser storage or logs.
 - **Keep tests offline.** `python -m pytest` must pass without a Moveworks instance.
 
-## Do not promise
+## The MCP server
 
-These are not implemented in this repo or not available in the API. Say so rather than building around a guess:
+- **Add a tool in four places.** Register it in `mcp_server/server.py` with annotations, put its logic in `service.py`, its output in `present.py`, and offline tests in `tests/test_mcp_*.py`.
+- **Annotate by effect.** A tool that sends a turn, presses a button, or submits a form is not read-only; clients use the annotation to decide when to confirm with the user. `ask_moveworks` stays a write tool.
+- **Keep writes in the write tools.** While options are showing, `ask_moveworks` refuses "yes", option labels, and option numbers, and points the model to `choose_moveworks_option`. Keep that guard (`_looks_like_selection` in `service.py`), and keep options and form submits usable once.
+- **Keep the local sign-in modes local.** The `dev_*` and `demo_oauth` modes act as a configured user. Don't relax the checks in `config.py` that keep them on localhost.
+- **Tool descriptions decide routing.** The descriptions and `INSTRUCTIONS` in `server.py` decide when a model calls Moveworks and whether it keeps a conversation going. After changing them, check routing with a real client. `mcp_server/clients/generic/mcp_chat.py` calls the tools directly, so it checks results but not routing.
+- **State is in memory.** Conversations and options live in one process. Running more than one instance needs a shared store first.
+
+## Outside this repo's scope
+
+These aren't built in this repo or aren't part of the API. Tell the developer so instead of guessing:
 
 - Live agent session state, such as queue position or whether a chat is still open (the API has no session resource; the README's API usage notes describe inferring the end of a chat from messages)
 - An attach control or modal `FILE` fields in the reference app (the library uploads with `files.upload_file`; a `FILE` value is `{"files": [{"file_id": ...}]}`)

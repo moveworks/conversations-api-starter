@@ -14,6 +14,8 @@ Before opening a PR:
   `moveworks_capi/rendering.py`.
 - Add a line under "Unreleased" in `CHANGELOG.md` for any change a user of the
   library would notice.
+- For the MCP server, keep tool annotations matched to what each tool does
+  and add offline tests in `tests/test_mcp_*.py`; `AGENTS.md` has the details.
 - Keep the reference app plain. Visual polish belongs in a fork or in the
   [demo app](https://github.com/moveworks/conversations-api-demo-app).
 - Never commit credentials, `.env` files, or private keys.

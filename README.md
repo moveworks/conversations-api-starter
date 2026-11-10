@@ -10,7 +10,7 @@ Use it to build:
 - **A custom chat surface** where employees sign in through your identity provider and talk to the Moveworks assistant from your portal, app, or other channel.
 - **A backend or workflow integration** where a trusted service acts on behalf of specific users.
 - **An evaluation harness** that runs test queries through the assistant.
-- **An example MCP server** that you host, which lets an AI client such as Claude Code or Gemini call the assistant as the signed-in user.
+- **An example MCP server** that you host, which lets an AI client such as Claude Code, ChatGPT, or Gemini call the assistant as the signed-in user.
 
 ---
 
@@ -21,7 +21,7 @@ Use it to build:
 | [`moveworks_capi/`](moveworks_capi/) | A client library: HTTP client, auth providers, responses, streaming, file upload, conversations, event polling, webhook verification, and helpers for displaying messages |
 | [`examples/`](examples/) | Runnable scripts, one pattern each. [`examples/README.md`](examples/README.md) lists the environment variables, expected output, and common failures for each. |
 | [`app/`](app/) | A reference web app: a chat surface built on the library. See [Reference web app](#reference-web-app). |
-| [`mcp_server/`](mcp_server/) | An example MCP server that exposes the assistant as tools, with setup for Claude Code, Gemini, and other MCP clients. See [`mcp_server/README.md`](mcp_server/README.md). |
+| [`mcp_server/`](mcp_server/) | An example MCP server that exposes the assistant as tools, with setup for Claude Code, ChatGPT, Gemini, and other MCP clients. See [`mcp_server/README.md`](mcp_server/README.md). |
 | [`tests/`](tests/) | An offline test suite |
 
 ```
@@ -154,7 +154,7 @@ When the reply offers forms, its text ends with a plain-text copy of each one. A
 | A backend service that acts on behalf of specific users | [`s2s_jwt_call.py`](examples/s2s_jwt_call.py) | Self-signed JWT |
 | An evaluation harness that runs queries as many users | [`s2s_jwt_call.py`](examples/s2s_jwt_call.py) | Self-signed JWT |
 | A backend that acts as a single service-account user | [`api_key_call.py`](examples/api_key_call.py) | HTTP Connector API Key |
-| Tools for an AI client such as Claude Code or Gemini | [`mcp_server/`](mcp_server/) | Okta or Entra ID token exchange, or self-signed JWT |
+| Tools for an AI client such as Claude Code, ChatGPT, or Gemini | [`mcp_server/`](mcp_server/) | Okta or Entra ID token exchange, or self-signed JWT |
 | Any of the above, plus proactive notifications | [`poll_events.py`](examples/poll_events.py) or [`receive_webhook.py`](examples/receive_webhook.py) | Any backend path |
 
 ### Choose an auth path

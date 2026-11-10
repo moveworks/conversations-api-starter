@@ -1,6 +1,6 @@
 """A minimal OAuth 2.1 authorization server for demos with clients that only accept OAuth.
 
-The Gemini app's custom connectors, for example, sign users in with OAuth: they discover the
+The Gemini app and ChatGPT, for example, sign users in with OAuth: they discover the
 endpoints from ``/.well-known`` metadata (MCP authorization spec), then ask
 for a client ID and secret. There is no customer IdP in a demo, so this module
 plays one: the sign-in page asks for a passphrase, and every token it issues
