@@ -1,0 +1,1 @@
+In one short, natural sentence, tell the caller you're still looking into this for them: "{query}". Vary your wording. Be neutral: don't say anything is being submitted, changed, or done, and don't guess at the answer.

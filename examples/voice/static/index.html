@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Voice demo · Moveworks Conversations API</title>
+  <style>
+    :root { font: 15px/1.45 system-ui, sans-serif; color: #1f2328; background: #f6f8fa; }
+    body { max-width: 980px; margin: 0 auto; padding: 24px; }
+    header { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; }
+    h1 { font-size: 20px; margin: 0; }
+    #status, #user { color: #59636e; }
+    .controls { display: flex; gap: 8px; margin: 16px 0; }
+    button { font: inherit; padding: 8px 16px; border-radius: 6px; border: 1px solid #d1d9e0; background: #fff; cursor: pointer; }
+    button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+    button:disabled { opacity: 0.5; cursor: default; }
+    .lanes, .row { display: grid; grid-template-columns: 56px 1fr 1fr 1fr; gap: 8px; }
+    .lanes { font-weight: 600; padding: 8px 0; border-bottom: 1px solid #d1d9e0; position: sticky; top: 0; background: #f6f8fa; }
+    .row { padding: 6px 0; border-bottom: 1px solid #eaeef2; }
+    .row .t { color: #59636e; font-variant-numeric: tabular-nums; }
+    .cell { background: #fff; border: 1px solid #d1d9e0; border-radius: 6px; padding: 6px 8px; white-space: pre-wrap; }
+    .cell.filler, .cell.progress { color: #59636e; font-style: italic; background: transparent; }
+    .cell.call { border-color: #8250df; }
+    .cell.result { border-color: #1a7f37; }
+    .cell.error { border-color: #cf222e; color: #cf222e; }
+    .cell .kind { display: block; font-size: 12px; color: #59636e; font-style: normal; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Voice demo</h1>
+    <span id="status">Not connected</span>
+    <span id="user"></span>
+  </header>
+  <div class="controls">
+    <button id="connect" class="primary">Connect</button>
+    <button id="mute" disabled>Mute</button>
+  </div>
+  <div class="lanes"><span></span><span>Caller</span><span>Voice harness</span><span>Orchestrator harness</span></div>
+  <div id="log" aria-live="polite"></div>
+  <script type="module" src="/static/voice.js"></script>
+</body>
+</html>

@@ -1,0 +1,1 @@
+In one short, natural sentence, tell the caller what you're doing right now, based on this status from the system working on their request: "{status}". Paraphrase it for the ear; don't read it word for word or name tools. Be neutral: don't say anything is done unless the status says it is.

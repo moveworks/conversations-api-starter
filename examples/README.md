@@ -61,7 +61,7 @@ Recommended order for a new integration:
 
 To see these patterns in one chat surface, run the reference web app with `python -m app` (see the [root README](../README.md#reference-web-app)).
 
-To put the assistant behind a phone number, see [`voice/`](voice/README.md): a Twilio Programmable Voice bridge that turns a call into Conversations API turns and reads the answers back, run with `python -m examples.voice`.
+To talk to the assistant by voice, see [`voice/`](voice/README.md): a realtime voice model (the voice harness) that hands real work to the Moveworks orchestrator through the Conversations API. Run it with `python -m examples.voice`.
 
 ### `check_setup.py`: End-to-end setup diagnostic
 

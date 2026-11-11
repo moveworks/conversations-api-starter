@@ -1,28 +1,31 @@
-"""Turn an assistant reply into text a phone voice can read aloud.
+"""Prepare the orchestrator's answers for the ear.
 
-Assistant replies are written for a screen: Markdown, links, bullet lists,
-emoji, and forms. On a call, a link or a table read aloud is noise, and a
-four-paragraph answer runs for minutes. This module:
+Conversations API answers are written for a screen: Markdown, links, lists,
+emoji, and forms. The voice model reads whatever the tool returns, so this
+module hands it plain sentences, split into sections it can deliver one at a
+time:
 
-- converts a message to plain sentences (:func:`speakable`), using
-  ``moveworks_capi.rendering`` for the API's Slack-style markup first;
-- splits long text into chunks of about 30 to 40 seconds of speech
-  (:func:`chunk_for_speech`), so the caller hears the first part and can ask
-  for more instead of waiting through all of it;
-- recognizes the short phrases a caller uses to steer playback
-  (:func:`wants_more`, :func:`wants_repeat`, :func:`wants_agent`) and spoken
-  button labels (:func:`match_option`).
+- :func:`speakable` turns Markdown or Slack-style text into plain sentences,
+  using ``moveworks_capi.rendering`` for the API's markup first.
+- :func:`sections` splits an answer at its labelled phases, steps, or
+  headings, so a how-to guide can be spoken one phase at a time, and falls
+  back to chunks of about 40 seconds of speech.
+- :func:`answer_text` collects the text of a response's messages without the
+  plain-text copy of offered forms.
+
+The voice model decides how to pace and phrase the result; this only removes
+what no voice should read and keeps every fact.
 """
 
 from __future__ import annotations
 
 import re
 import unicodedata
-from typing import Any, Dict, List, Mapping, Optional, Sequence
+from typing import Any, List, Mapping, Sequence
 
 from moveworks_capi.rendering import normalize_markup, strip_flattened_forms
 
-MAX_SPEECH_CHARS = 600
+MAX_SECTION_CHARS = 600
 """About 40 seconds of speech at a typical text-to-speech rate."""
 
 _CODE_FENCE = re.compile(r"^\s*```.*$", re.MULTILINE)
@@ -35,24 +38,20 @@ _EMPHASIS = re.compile(r"\*\*|__|~~|`+|(?<!\w)[*_](?=\S)|(?<=\S)[*_](?!\w)")
 _SPACE_BEFORE_PUNCTUATION = re.compile(r"\s+([,.;:!?])")
 _SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
 _TRAILING_CONJUNCTION = re.compile(r"\b(?:and|or|but|then)$", re.IGNORECASE)
+_SECTION_START = re.compile(r"^\s*(?:#{1,6}\s+|\**(?:phase|step|part|section|option)\s+\d+\b)", re.IGNORECASE)
 _KEEP_SYMBOLS = frozenset("°©®™")
-_NOT_LETTERS = re.compile(r"[^a-z0-9' ]+")
-
-_MORE = ("more", "continue", "keep going", "go on", "go ahead", "next", "yes", "yeah", "yes please", "sure", "tell me more")
-_REPEAT = ("repeat", "repeat that", "say that again", "again", "what", "pardon", "come again", "sorry what")
-_AGENT = ("agent", "person", "human", "representative", "operator", "someone", "live agent", "real person", "human agent")
 
 
-def reply_text(messages: Sequence[Mapping[str, Any]]) -> str:
-    """The speakable text of one or more assistant messages, in order.
+def answer_text(messages: Sequence[Mapping[str, Any]]) -> str:
+    """The Markdown text of one or more assistant messages, in order.
 
     Each message is a message object (a completed response's
-    ``outputs[].message`` or a history entry). The plain-text copy of offered
-    forms at the end of a message is removed first: the form itself cannot be
-    used on a call, so reading its title and description adds nothing.
+    ``outputs[].message``, a stream delta's ``output.message``, or a history
+    entry). The plain-text copy of offered forms at the end of a message is
+    removed: a form can't be filled in by voice.
     """
-    parts = [speakable(strip_flattened_forms(dict(message))) for message in messages]
-    return " ".join(part for part in parts if part)
+    parts = [strip_flattened_forms(dict(message)).strip() for message in messages]
+    return "\n\n".join(part for part in parts if part)
 
 
 def speakable(text: str) -> str:
@@ -60,7 +59,7 @@ def speakable(text: str) -> str:
 
     Links keep their label and lose the URL; a bare URL becomes "the link".
     List items and table rows become sentences. Emoji are dropped, since a
-    voice reads them by name ("white heavy check mark").
+    voice reads them by name.
     """
     text = normalize_markup(text or "")
     text = _CODE_FENCE.sub("", text)
@@ -86,12 +85,28 @@ def speakable(text: str) -> str:
     return _SPACE_BEFORE_PUNCTUATION.sub(r"\1", " ".join(sentences))
 
 
-def chunk_for_speech(text: str, max_chars: int = MAX_SPEECH_CHARS) -> List[str]:
-    """Split text into chunks of at most ``max_chars``, at sentence ends.
+def sections(markdown: str, max_chars: int = MAX_SECTION_CHARS) -> List[str]:
+    """Speakable sections of an answer, in order.
 
-    A single sentence longer than ``max_chars`` is split at the last space
-    before the limit.
+    An answer organized into labelled phases, steps, or headings splits at
+    them, so the voice model can speak one and pause. Any section longer than
+    ``max_chars`` is split further at sentence ends.
     """
+    blocks: List[List[str]] = [[]]
+    for line in normalize_markup(markdown or "").splitlines():
+        if _SECTION_START.match(line) and any(part.strip() for part in blocks[-1]):
+            blocks.append([])
+        blocks[-1].append(line)
+    result: List[str] = []
+    for block in blocks:
+        text = speakable("\n".join(block))
+        if text:
+            result.extend(_chunk(text, max_chars))
+    return result
+
+
+def _chunk(text: str, max_chars: int) -> List[str]:
+    """Split text into pieces of at most ``max_chars``, at sentence ends where possible."""
     chunks: List[str] = []
     current = ""
     for sentence in _SENTENCE_END.split(text.strip()):
@@ -113,50 +128,6 @@ def chunk_for_speech(text: str, max_chars: int = MAX_SPEECH_CHARS) -> List[str]:
     if current:
         chunks.append(current)
     return chunks
-
-
-def wants_more(utterance: str) -> bool:
-    """The caller asked to hear the rest of a long answer."""
-    return _normalize(utterance) in _MORE
-
-
-def wants_repeat(utterance: str) -> bool:
-    """The caller asked to hear the last part again."""
-    return _normalize(utterance) in _REPEAT
-
-
-def wants_agent(utterance: str) -> bool:
-    """The caller asked for a person, as a whole utterance ("agent", "talk to a human")."""
-    words = _normalize(utterance)
-    for prefix in ("i want ", "i need ", "let me talk to ", "talk to ", "speak to ", "speak with ", "transfer me to "):
-        if words.startswith(prefix):
-            words = words[len(prefix):]
-            break
-    for article in ("a ", "an ", "the "):
-        if words.startswith(article):
-            words = words[len(article):]
-            break
-    return words in _AGENT
-
-
-def match_option(utterance: str, options: Mapping[str, str]) -> Optional[str]:
-    """The value of the option whose label the caller said, if exactly one matches.
-
-    ``options`` maps a button label to its value, such as a ``callback_id``.
-    A label matches when the caller said it as whole words: "approve it"
-    matches "Approve", and "I don't know" does not match "No".
-    """
-    said = f" {_normalize(utterance)} "
-    hits: Dict[str, str] = {}
-    for label, value in options.items():
-        words = _normalize(label)
-        if words and f" {words} " in said:
-            hits[label] = value
-    return next(iter(hits.values())) if len(hits) == 1 else None
-
-
-def _normalize(text: str) -> str:
-    return " ".join(_NOT_LETTERS.sub(" ", (text or "").lower()).split())
 
 
 def _drop_emoji(text: str) -> str:

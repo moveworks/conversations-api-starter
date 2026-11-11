@@ -1,47 +1,37 @@
-"""The voice example: speech formatting, TwiML, the turn runner, and the Twilio webhooks.
+"""The voice demo: speech prep, tuning, the Realtime session, the orchestrator harness, and the server.
 
-Twilio and the Conversations API are both mocked: webhook requests are signed
-with a test auth token, and turns run against fake CAPI calls or a real client
-over a mock HTTP session.
+OpenAI Realtime and the Conversations API are both mocked: client secrets come
+from a fake HTTP session, and orchestrator turns run against fake library
+calls or a real client over a mock HTTP session.
 """
 
 from __future__ import annotations
 
 import json
-from concurrent.futures import Executor, Future
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, Generator, List, Optional
 from unittest.mock import MagicMock
-from xml.etree import ElementTree as ET
 
 import pytest
 from fastapi.testclient import TestClient
 
-from examples.voice import bridge, server
-from examples.voice.bridge import CallerDirectory, CallSession, CallSessions, ClientPool, Reply, TurnRunner
-from examples.voice.speech import (
-    chunk_for_speech,
-    match_option,
-    reply_text,
-    speakable,
-    wants_agent,
-    wants_more,
-    wants_repeat,
-)
-from examples.voice.twiml import TwiML, is_valid_signature, twilio_signature
+from examples.voice import orchestrator as orch
+from examples.voice import server
+from examples.voice.orchestrator import Orchestrator, Sessions, VoiceSession, latest_status
+from examples.voice.realtime import CALLS_URL, RealtimeError, create_client_secret, session_config
+from examples.voice.speech import answer_text, sections, speakable
+from examples.voice.tuning import Tuning
 from moveworks_capi.client import ConversationsApiClient
 from moveworks_capi.errors import RateLimitedError, StreamClosedError, StreamError
 from moveworks_capi.responses import Response
-from moveworks_capi.streaming import ResponseCompleted, ResponseCreated
+from moveworks_capi.streaming import OutputDelta, ResponseCompleted, ResponseCreated
 
 FIXTURES = Path(__file__).parent / "fixtures"
-AUTH_TOKEN = "test-auth-token"
-PUBLIC_URL = "https://voice.example.com"
-CALLER = "+15555550100"
 
 
-def _message(text: str, actions: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+def _message(text: str, actions: Optional[List[Dict[str, Any]]] = None, message_id: str = "msg_1") -> Dict[str, Any]:
     return {
+        "message_id": message_id,
         "actor": "ASSISTANT",
         "content": {"type": "MARKDOWN_TEXT", "markdown_text": {"text": text}},
         "actions": actions or [],
@@ -53,10 +43,19 @@ def _response(status: str = "COMPLETED", messages: Optional[List[Dict[str, Any]]
     return Response.from_json({"response_id": response_id, "conversation_id": "conv_1", "status": status, "outputs": outputs})
 
 
+def _reasoning(text: str, seq: int = 1) -> OutputDelta:
+    output = {"type": "REASONING_MESSAGE", "reasoning_message": {"content": {"type": "PLAIN_TEXT", "plain_text": {"text": text}}}}
+    return OutputDelta(seq, {}, "REASONING_MESSAGE", text, output)
+
+
+def _answer_delta(message: Dict[str, Any], seq: int = 2) -> OutputDelta:
+    return OutputDelta(seq, {}, "MESSAGE", None, {"type": "MESSAGE", "message": message})
+
+
 # --- speech -----------------------------------------------------------------
 
 
-class TestSpeakable:
+class TestSpeech:
     def test_markdown_becomes_plain_sentences(self) -> None:
         text = (
             "## Reset steps\n\n1. Open **Settings** :point_right: then [Okta](https://okta.example.com)\n"
@@ -67,135 +66,124 @@ class TestSpeakable:
     def test_slack_links_keep_their_label(self) -> None:
         assert speakable("See <https://portal.example.com/kb/1|the VPN guide>.") == "See the VPN guide."
 
-    def test_a_list_item_ending_in_a_conjunction_runs_on(self) -> None:
-        assert speakable("Either:\n1. enroll, or\n2. ask a question") == "Either: enroll, or ask a question."
+    def test_a_guide_splits_at_its_phases(self) -> None:
+        guide = (
+            "The two VPN clients can conflict.\n\n"
+            "Phase 1. Reset the order. Disconnect the VPN, then restart the proxy.\n\n"
+            "Phase 2. Reconnect. Connect the VPN again.\n\n"
+            "**Step 3** Call the service desk if it still drops."
+        )
+        assert sections(guide) == [
+            "The two VPN clients can conflict.",
+            "Phase 1. Reset the order. Disconnect the VPN, then restart the proxy.",
+            "Phase 2. Reconnect. Connect the VPN again.",
+            "Step 3 Call the service desk if it still drops.",
+        ]
 
-    def test_reply_text_drops_the_flattened_form_copies(self) -> None:
+    def test_a_long_answer_without_structure_splits_by_length(self) -> None:
+        text = " ".join(f"Sentence number {i} is here." for i in range(60))
+        parts = sections(text, max_chars=200)
+        assert len(parts) > 1 and all(len(p) <= 200 for p in parts)
+        assert " ".join(parts) == text
+
+    def test_answer_text_drops_the_flattened_form_copies(self) -> None:
         message = json.loads((FIXTURES / "portal_form_message.json").read_text())
-        text = reply_text([message])
+        text = speakable(answer_text([message]))
         assert "401(k) Plan Enrollment form" in text
         assert "Enroll in or modify your 401(k) plan" not in text
-        assert "**" not in text
+
+    def test_latest_status_is_the_newest_line_of_the_trail(self) -> None:
+        assert latest_status("Looking up the caller\n\n**Searching** knowledge for VPN errors") == "Searching knowledge for VPN errors."
+        assert latest_status("") == ""
 
 
-class TestChunkForSpeech:
-    def test_short_text_is_one_chunk(self) -> None:
-        assert chunk_for_speech("One. Two.") == ["One. Two."]
-
-    def test_long_text_splits_at_sentence_ends(self) -> None:
-        sentences = [f"Sentence number {i} is here." for i in range(40)]
-        chunks = chunk_for_speech(" ".join(sentences), max_chars=120)
-        assert len(chunks) > 1
-        assert all(len(chunk) <= 120 for chunk in chunks)
-        assert all(chunk.endswith(".") for chunk in chunks)
-        assert " ".join(chunks) == " ".join(sentences)
-
-    def test_a_sentence_longer_than_the_limit_splits_at_a_space(self) -> None:
-        chunks = chunk_for_speech("word " * 100, max_chars=50)
-        assert all(0 < len(chunk) <= 50 for chunk in chunks)
-        assert " ".join(chunks).split() == ["word"] * 100
+# --- tuning and the Realtime session ----------------------------------------
 
 
-class TestCallerPhrases:
-    @pytest.mark.parametrize("said", ["More.", "continue", "Keep going!", "yes"])
-    def test_more(self, said: str) -> None:
-        assert wants_more(said)
+class TestTuning:
+    def test_loads_every_prompt(self) -> None:
+        tuning = Tuning.load(env={})
+        for name in ("voice_instructions", "delegation", "welcome", "warmup", "filler", "progress"):
+            assert getattr(tuning, name), name
+        assert "{query}" in tuning.filler and "{status}" in tuning.progress
 
-    def test_a_question_is_not_more(self) -> None:
-        assert not wants_more("more about the VPN outage")
+    def test_env_overrides(self, tmp_path: Path) -> None:
+        for name in ("voice_instructions", "delegation", "welcome", "warmup", "filler", "progress"):
+            (tmp_path / f"{name}.md").write_text(f"my {name}")
+        tuning = Tuning.load(env={
+            "VOICE_PROMPTS_DIR": str(tmp_path), "OPENAI_REALTIME_MODEL": "gpt-realtime-mini", "VOICE_REALTIME_VOICE": "cedar",
+            "VOICE_WARMUP": "off", "VOICE_CANCEL_ON_BARGE_IN": "false", "VOICE_PROGRESS_MIN_MS": "3000", "VOICE_GLOSSARY": "Okta, PTO",
+        })
+        assert tuning.voice_instructions == "my voice_instructions"
+        assert (tuning.model, tuning.voice, tuning.warmup, tuning.cancel_lookup_on_barge_in) == ("gpt-realtime-mini", "cedar", "", False)
+        assert tuning.progress_min_ms == 3000 and tuning.glossary == "Okta, PTO"
 
-    def test_repeat(self) -> None:
-        assert wants_repeat("Say that again?")
-
-    @pytest.mark.parametrize("said", ["Agent.", "talk to a human", "I want a representative"])
-    def test_agent(self, said: str) -> None:
-        assert wants_agent(said)
-
-    def test_a_question_about_agents_is_not_a_transfer(self) -> None:
-        assert not wants_agent("how do I install the monitoring agent")
-
-    def test_match_option_by_whole_words(self) -> None:
-        options = {"Approve": "cb_yes", "No": "cb_no"}
-        assert match_option("Approve it, please.", options) == "cb_yes"
-        assert match_option("I don't know", options) is None
-
-    def test_match_option_needs_exactly_one_hit(self) -> None:
-        assert match_option("approve or reject", {"Approve": "a", "Reject": "r"}) is None
-
-
-# --- TwiML ------------------------------------------------------------------
+    def test_the_client_view_has_timing_and_wording_only(self) -> None:
+        view = Tuning.load(env={}).client_view()
+        assert set(view) == {
+            "welcome", "warmup", "filler", "progress", "upfront_filler_ms", "progress_min_ms", "progress_max_ms",
+            "cancel_lookup_on_barge_in", "warmup_wait_ms",
+        }
 
 
-class TestTwiML:
-    def test_text_is_escaped(self) -> None:
-        xml = TwiML().say('Use <Hangup/> & "quotes"').to_xml()
-        root = ET.fromstring(xml)
-        assert [child.tag for child in root] == ["Say"]
-        assert root[0].text == 'Use <Hangup/> & "quotes"'
+class TestRealtime:
+    def test_session_config(self) -> None:
+        config = session_config(Tuning.load(env={}))
+        assert config["type"] == "realtime" and config["model"] == "gpt-realtime-2.1"
+        assert config["audio"]["input"]["turn_detection"]["type"] == "semantic_vad"
+        assert config["audio"]["input"]["turn_detection"]["interrupt_response"] is True
+        assert config["audio"]["output"]["voice"] == "marin"
+        [tool] = config["tools"]
+        assert tool["name"] == "ask_orchestrator"
+        assert tool["parameters"]["required"] == ["query"]
+        assert set(tool["parameters"]["properties"]) == {"query", "choice", "expected_duration"}
 
-    def test_gather_listens_for_speech_and_reads_the_prompt_inside(self) -> None:
-        root = ET.fromstring(TwiML(voice="Polly.Joanna").gather(action="/voice/turn", prompt="Hi", hints="VPN, PTO").to_xml())
-        gather = root.find("Gather")
-        assert gather is not None
-        assert gather.attrib["input"] == "speech"
-        assert gather.attrib["action"] == "/voice/turn"
-        assert gather.attrib["speechTimeout"] == "auto"
-        assert gather.attrib["hints"] == "VPN, PTO"
-        say = gather.find("Say")
-        assert say is not None and say.text == "Hi" and say.attrib["voice"] == "Polly.Joanna"
+    def test_a_glossary_biases_transcription_and_pronunciation(self) -> None:
+        config = session_config(Tuning.load(env={"VOICE_GLOSSARY": "Okta, Workday"}))
+        assert config["audio"]["input"]["transcription"]["prompt"] == "Okta, Workday"
+        assert "Okta, Workday" in config["instructions"]
 
-    def test_signature_matches_twilios_reference_implementation(self) -> None:
-        # Values computed with twilio.request_validator.RequestValidator.
-        params = {"CallSid": "CA1234567890ABCDE", "From": "+15555550100", "SpeechResult": "reset my password", "To": "+15555550199"}
-        assert twilio_signature("12345", "https://example.com/voice/turn?attempt=1", params) == "jx8f1mThn4j2xx1dtHacTeVpwNk="
-        assert twilio_signature("12345", "https://example.com/voice/incoming", {"CallSid": "CA1", "From": "+15555550100"}) == (
-            "p4f8tSlKgxxchJfiY+P8GhyDPBk="
-        )
+    def test_mints_a_client_secret_with_the_server_key(self) -> None:
+        http = MagicMock()
+        http.post.return_value = MagicMock(status_code=200, json=lambda: {"value": "ek_123", "expires_at": 1900000000})
+        assert create_client_secret("sk-test", {"type": "realtime"}, http=http) == {"value": "ek_123", "expires_at": 1900000000}
+        url = http.post.call_args.args[0]
+        assert url == "https://api.openai.com/v1/realtime/client_secrets"
+        assert http.post.call_args.kwargs["headers"]["Authorization"] == "Bearer sk-test"
+        assert http.post.call_args.kwargs["json"]["session"] == {"type": "realtime"}
 
-    def test_signature_check(self) -> None:
-        params = {"CallSid": "CA1"}
-        good = twilio_signature(AUTH_TOKEN, PUBLIC_URL + "/voice/incoming", params)
-        assert is_valid_signature(AUTH_TOKEN, PUBLIC_URL + "/voice/incoming", params, good)
-        assert not is_valid_signature(AUTH_TOKEN, PUBLIC_URL + "/voice/incoming", {"CallSid": "CA2"}, good)
-        assert not is_valid_signature(AUTH_TOKEN, PUBLIC_URL + "/voice/incoming", params, None)
-
-
-# --- bridge -----------------------------------------------------------------
+    def test_a_refused_secret_raises(self) -> None:
+        http = MagicMock()
+        http.post.return_value = MagicMock(status_code=401, text="invalid key")
+        with pytest.raises(RealtimeError):
+            create_client_secret("sk-bad", {}, http=http)
 
 
-class TestCallerDirectory:
-    def test_parse_and_lookup_ignore_formatting(self) -> None:
-        directory = CallerDirectory(CallerDirectory.parse("+1 (555) 555-0100=jane@example.com, +15555550101=raj@example.com"))
-        assert directory.lookup("+15555550100") == "jane@example.com"
-        assert directory.lookup("+1 555 555 0101") == "raj@example.com"
-        assert directory.lookup("+15555550199") is None
-
-    def test_parse_rejects_an_entry_without_a_user(self) -> None:
-        with pytest.raises(ValueError):
-            CallerDirectory.parse("+15555550100")
-
-    def test_default_user(self) -> None:
-        assert CallerDirectory({}, default_user="api-key user").lookup("+15555550199") == "api-key user"
+# --- the orchestrator harness -----------------------------------------------
 
 
 class _FakeCapi:
-    """Stands in for the library calls the runner makes."""
+    """Stands in for the library calls the orchestrator makes."""
 
     def __init__(self, monkeypatch: pytest.MonkeyPatch) -> None:
         self.created: List[str] = []
         self.streamed: List[Dict[str, Any]] = []
         self.submitted: List[Dict[str, Any]] = []
         self.polled: List[Dict[str, Any]] = []
-        self.stream_events: Callable[[], Any] = lambda: iter(
-            [ResponseCreated(0, {}, "resp_1", "conv_1"), ResponseCompleted(1, {}, "resp_1", "COMPLETED")]
-        )
-        self.final: Any = _response(messages=[_message("Your PTO balance is 12 days.")])
+        self.stream_events: Callable[[], Any] = lambda: iter([
+            ResponseCreated(0, {}, "resp_1", "conv_1"),
+            _reasoning("Looking up your calendar"),
+            _reasoning("Looking up your calendar\nReading Monday's events"),
+            _answer_delta(_message("You have **three** meetings on Monday.")),
+            ResponseCompleted(3, {}, "resp_1", "COMPLETED"),
+        ])
+        self.final: Any = _response(messages=[_message("Polled answer.")])
         self.history: List[Dict[str, Any]] = []
-        monkeypatch.setattr(bridge, "create_conversation", self._create_conversation)
-        monkeypatch.setattr(bridge, "stream_response", self._stream_response)
-        monkeypatch.setattr(bridge, "create_response", self._create_response)
-        monkeypatch.setattr(bridge, "wait_for_completion", self._wait_for_completion)
-        monkeypatch.setattr(bridge, "list_messages", lambda client, cid, limit=None: {"messages": self.history})
+        monkeypatch.setattr(orch, "create_conversation", self._create_conversation)
+        monkeypatch.setattr(orch, "stream_response", self._stream_response)
+        monkeypatch.setattr(orch, "create_response", self._create_response)
+        monkeypatch.setattr(orch, "wait_for_completion", self._wait_for_completion)
+        monkeypatch.setattr(orch, "list_messages", lambda client, cid, limit=None: {"messages": self.history})
 
     def _create_conversation(self, client: Any, *, title: Optional[str] = None) -> Dict[str, Any]:
         self.created.append(title or "")
@@ -229,106 +217,141 @@ def capi(monkeypatch: pytest.MonkeyPatch) -> _FakeCapi:
     return _FakeCapi(monkeypatch)
 
 
-def _session() -> CallSession:
-    return CallSession(call_sid="CA1", user="jane@example.com", client=MagicMock())
+def _ask(query: str = "What's on my calendar Monday?", session: Optional[VoiceSession] = None, **kwargs: Any) -> List[Dict[str, Any]]:
+    return list(Orchestrator(MagicMock(), **kwargs).ask(session or VoiceSession("s1"), query))
 
 
-class TestTurnRunner:
-    def test_streams_the_turn_and_reads_the_answer_once(self, capi: _FakeCapi) -> None:
-        reply = TurnRunner().run(_session(), "How much PTO do I have?")
-        assert reply == Reply("Your PTO balance is 12 days.")
-        assert capi.streamed[0]["text"] == "How much PTO do I have?"
-        assert capi.polled == [{"response_id": "resp_1", "timeout_seconds": pytest.approx(150.0, abs=1), "initial_delay_seconds": 0.0}]
-        assert capi.submitted == []
+def _result(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    assert events[-1]["type"] == "result"
+    return events[-1]["output"]
 
-    def test_one_conversation_per_call(self, capi: _FakeCapi) -> None:
-        session = _session()
-        runner = TurnRunner()
-        runner.run(session, "first")
-        runner.run(session, "second")
-        assert capi.created == ["Phone call"]
-        assert session.conversation_id == "conv_1"
+
+class TestOrchestrator:
+    def test_streams_progress_then_the_answer_from_the_stream(self, capi: _FakeCapi) -> None:
+        events = _ask()
+        assert [e for e in events if e["type"] == "progress"] == [
+            {"type": "progress", "text": "Looking up your calendar."},
+            {"type": "progress", "text": "Reading Monday's events."},
+        ]
+        assert _result(events) == {"status": "answered", "answer": "You have three meetings on Monday."}
+        assert capi.polled == [] and capi.submitted == []
+
+    def test_one_conversation_per_voice_session(self, capi: _FakeCapi) -> None:
+        session = VoiceSession("s1")
+        orchestrator = Orchestrator(MagicMock())
+        list(orchestrator.ask(session, "first"))
+        list(orchestrator.ask(session, "second"))
+        assert capi.created == ["Voice call"]
+        assert [s["text"] for s in capi.streamed] == ["first", "second"]
 
     def test_the_120_second_stream_limit_switches_to_polling(self, capi: _FakeCapi) -> None:
         capi.stream_events = _raising(
-            [ResponseCreated(0, {}, "resp_1", "conv_1")],
+            [ResponseCreated(0, {}, "resp_1", "conv_1"), _reasoning("Searching knowledge")],
             StreamError("Streaming timeout", code="CONVERSATIONS_REST_API_STREAM_LISTEN_TIMEOUT"),
         )
-        reply = TurnRunner().run(_session(), "Summarize my open tickets")
-        assert reply.text == "Your PTO balance is 12 days."
-        assert capi.polled[0]["response_id"] == "resp_1"
-        assert capi.polled[0]["initial_delay_seconds"] == 1.0
+        assert _result(_ask())["answer"] == "Polled answer."
+        assert capi.polled[0]["response_id"] == "resp_1" and capi.polled[0]["initial_delay_seconds"] == 1.0
         assert capi.submitted == []
 
     def test_a_dropped_stream_switches_to_polling(self, capi: _FakeCapi) -> None:
         capi.stream_events = _raising([], StreamClosedError("dropped", response_id="resp_1"))
-        assert not TurnRunner().run(_session(), "hi").failed
+        assert _result(_ask())["status"] == "answered"
         assert capi.polled[0]["response_id"] == "resp_1"
 
     def test_a_stream_error_before_the_turn_was_accepted_is_never_resent(self, capi: _FakeCapi) -> None:
         capi.stream_events = _raising([], StreamError("bad request"))
-        reply = TurnRunner().run(_session(), "hi")
-        assert reply == Reply(bridge.TROUBLE, failed=True)
+        assert _result(_ask())["status"] == "error"
         assert capi.submitted == []
 
     def test_a_rate_limited_stream_open_submits_through_the_shared_client(self, capi: _FakeCapi) -> None:
         capi.stream_events = _raising([], RateLimitedError("rate limited", retry_after=5.0))
-        reply = TurnRunner().run(_session(), "hi")
-        assert not reply.failed
+        assert _result(_ask("hi"))["answer"] == "Polled answer."
         assert capi.submitted == [{"text": "hi", "callback_id": None}]
         assert capi.polled[0]["response_id"] == "resp_2"
 
-    def test_rate_limited_after_retries_says_busy(self, capi: _FakeCapi) -> None:
+    def test_rate_limited_after_retries_is_busy(self, capi: _FakeCapi) -> None:
+        capi.stream_events = _raising([], RateLimitedError("rate limited"))
         capi.final = RateLimitedError("rate limited")
-        assert TurnRunner().run(_session(), "hi") == Reply(bridge.BUSY, failed=True)
+        assert _result(_ask())["status"] == "busy"
 
-    def test_a_slow_answer_says_so(self, capi: _FakeCapi) -> None:
-        capi.final = TimeoutError("response resp_1 still IN_PROGRESS after 150s")
-        assert TurnRunner().run(_session(), "hi") == Reply(bridge.SLOW, failed=True)
+    def test_a_slow_turn_is_timed_out_not_failed(self, capi: _FakeCapi) -> None:
+        capi.stream_events = _raising([ResponseCreated(0, {}, "resp_1", "conv_1")], StreamError("timeout"))
+        capi.final = TimeoutError("still IN_PROGRESS")
+        assert _result(_ask())["status"] == "timed_out"
 
-    def test_a_failed_response_speaks_its_message(self, capi: _FakeCapi) -> None:
-        capi.final = _response("FAILED", [_message("I couldn't reach the HR system.")])
-        assert TurnRunner().run(_session(), "hi") == Reply("I couldn't reach the HR system.", failed=True)
+    def test_a_failed_response_keeps_its_message(self, capi: _FakeCapi) -> None:
+        capi.stream_events = lambda: iter([
+            ResponseCreated(0, {}, "resp_1", "conv_1"),
+            _answer_delta(_message("I couldn't move the meeting. The calendar service returned an error.")),
+            ResponseCompleted(2, {}, "resp_1", "FAILED"),
+        ])
+        assert _result(_ask()) == {"status": "failed", "answer": "I couldn't move the meeting. The calendar service returned an error."}
 
-    def test_buttons_become_spoken_options_and_links_are_flagged(self, capi: _FakeCapi) -> None:
-        capi.final = _response(messages=[_message("Submit the request?", [
-            {"type": "CALLBACK_ACTION", "label": ":white_check_mark: Submit", "callback_action": {"callback_id": "cb_submit"}},
-            {"type": "CALLBACK_ACTION", "label": "Cancel", "callback_action": {"callback_id": "cb_cancel"}},
-            {"type": "URL_ACTION", "label": "Open ticket", "url_action": {"url": "https://portal.example.com/t/1"}},
-        ])])
-        reply = TurnRunner().run(_session(), "file a ticket")
-        assert reply.options == {"✅ Submit": "cb_submit", "Cancel": "cb_cancel"}
-        assert reply.has_link_or_form
+    def test_a_guide_comes_back_in_sections(self, capi: _FakeCapi) -> None:
+        capi.stream_events = lambda: iter([
+            _answer_delta(_message("They conflict.\n\nPhase 1. Disconnect the VPN.\n\nPhase 2. Reconnect it.")),
+            ResponseCompleted(2, {}, "resp_1", "COMPLETED"),
+        ])
+        output = _result(_ask("How do I fix my VPN?"))
+        assert output["sections"] == ["They conflict.", "Phase 1. Disconnect the VPN.", "Phase 2. Reconnect it."]
+        assert output["answer"] == "They conflict. Phase 1. Disconnect the VPN. Phase 2. Reconnect it."
 
-    def test_a_button_press_is_sent_as_a_callback(self, capi: _FakeCapi) -> None:
-        TurnRunner().run(_session(), callback_id="cb_submit")
-        assert capi.streamed[0] == {"text": None, "callback_id": "cb_submit", "timeout_seconds": bridge.STREAM_TIMEOUT_SECONDS}
-
-    def test_the_context_hint_goes_with_the_first_turn_only(self, capi: _FakeCapi) -> None:
-        session = _session()
-        runner = TurnRunner(context_hint="I'm on a phone call; keep answers short.")
-        runner.run(session, "first")
-        runner.run(session, "second")
-        assert capi.streamed[0]["text"] == "I'm on a phone call; keep answers short.\n\nfirst"
-        assert capi.streamed[1]["text"] == "second"
-
-    def test_polling_mode_submits_then_polls(self, capi: _FakeCapi) -> None:
-        TurnRunner(stream=False).run(_session(), "hi")
-        assert capi.streamed == []
-        assert capi.submitted == [{"text": "hi", "callback_id": None}]
+    def test_buttons_are_offered_then_pressed_by_label(self, capi: _FakeCapi) -> None:
+        capi.stream_events = lambda: iter([
+            _answer_delta(_message("Submit the request?", [
+                {"type": "CALLBACK_ACTION", "label": "Submit", "callback_action": {"callback_id": "cb_submit"}},
+                {"type": "URL_ACTION", "label": "Open it", "url_action": {"url": "https://portal.example.com/r/1"}},
+            ])),
+            ResponseCompleted(2, {}, "resp_1", "COMPLETED"),
+        ])
+        session = VoiceSession("s1")
+        orchestrator = Orchestrator(MagicMock())
+        output = _result(list(orchestrator.ask(session, "Order a monitor")))
+        assert output["buttons"] == ["Submit"] and output["has_link_or_form"] is True
+        list(orchestrator.ask(session, "submit it", choice="submit"))
+        assert capi.streamed[1] == {"text": None, "callback_id": "cb_submit", "timeout_seconds": orch.STREAM_TIMEOUT_SECONDS}
 
     def test_an_empty_response_reads_the_late_reply_from_history(self, capi: _FakeCapi) -> None:
+        capi.stream_events = lambda: iter([ResponseCreated(0, {}, "resp_1", "conv_1"), ResponseCompleted(1, {}, "resp_1", "COMPLETED")])
         capi.final = _response(messages=[])
         capi.history = [
             {"actor": "USER", "response_id": "resp_1", "created_at": "2026-01-01T00:00:00Z"},
             {**_message("The live chat has ended."), "created_at": "2026-01-01T00:00:01Z"},
         ]
-        assert TurnRunner().run(_session(), callback_id="cb_end").text == "The live chat has ended."
+        assert _result(_ask())["answer"] == "The live chat has ended."
+        assert capi.polled[0]["initial_delay_seconds"] == 0.0
+
+    def test_polling_mode_submits_then_polls(self, capi: _FakeCapi) -> None:
+        assert _result(_ask("hi", stream=False))["answer"] == "Polled answer."
+        assert capi.streamed == [] and capi.submitted == [{"text": "hi", "callback_id": None}]
+
+    def test_a_cancelled_lookup_closes_the_stream_and_frees_the_session(self, capi: _FakeCapi) -> None:
+        closed: List[bool] = []
+
+        def events() -> Any:
+            try:
+                yield ResponseCreated(0, {}, "resp_1", "conv_1")
+                yield _reasoning("Searching")
+                yield _reasoning("Searching\nStill searching")
+            finally:
+                closed.append(True)
+
+        capi.stream_events = events
+        session = VoiceSession("s1")
+        lookup = Orchestrator(MagicMock()).ask(session, "slow question")
+        assert next(lookup)["type"] == "progress"
+        lookup.close()
+        assert closed == [True]
+        assert session.lock.acquire(blocking=False)
+
+    def test_warm_up_returns_the_answer_as_context(self, capi: _FakeCapi) -> None:
+        context = Orchestrator(MagicMock()).warm_up(VoiceSession("s1"), "Who am I talking to?")
+        assert context == "You have three meetings on Monday."
 
 
 class _FakeHttp:
-    def __init__(self, status_code: int = 200, payload: Optional[dict] = None, lines: Optional[List[str]] = None) -> None:
-        self.status_code = status_code
+    def __init__(self, payload: Optional[dict] = None, lines: Optional[List[str]] = None) -> None:
+        self.status_code = 200
         self._payload = payload or {}
         self._lines = lines or []
         self.headers: Dict[str, str] = {}
@@ -351,253 +374,139 @@ def _sse(event: str, data: dict) -> List[str]:
     return [f"event: {event}", f"data: {json.dumps({'event_type': event, **data})}", ""]
 
 
-def test_a_turn_end_to_end_through_the_real_client(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The runner over the real library, with only the HTTP session mocked."""
-    monkeypatch.setattr("moveworks_capi.responses.time.sleep", lambda _seconds: None)
-    completed = {
-        "response_id": "resp_1", "conversation_id": "conv_1", "status": "COMPLETED",
-        "outputs": [{"type": "MESSAGE", "message": _message("Your laptop **ships Friday**.")}],
-    }
+def test_an_orchestrator_turn_end_to_end_through_the_real_client() -> None:
+    """The orchestrator over the real library, with only the HTTP session mocked."""
+    message = _message("Your laptop **ships Friday**.")
     http = MagicMock()
-    http.request.side_effect = [
-        _FakeHttp(payload={"conversation_id": "conv_1"}),  # POST /rest/v1/conversations
-        _FakeHttp(payload=completed),  # GET .../responses/resp_1
-    ]
+    http.request.return_value = _FakeHttp(payload={"conversation_id": "conv_1"})
     http.post.return_value = _FakeHttp(lines=[
         *_sse("RESPONSE_CREATED", {"response": {"response_id": "resp_1", "conversation_id": "conv_1"}}),
+        *_sse("RESPONSE_OUTPUT_DELTA", {"output": {
+            "type": "REASONING_MESSAGE",
+            "reasoning_message": {"content": {"type": "PLAIN_TEXT", "plain_text": {"text": "Checking your order"}}},
+        }}),
+        *_sse("RESPONSE_OUTPUT_DELTA", {"output": {"type": "MESSAGE", "message": message}}),
         *_sse("RESPONSE_COMPLETED", {"response": {"response_id": "resp_1", "status": "COMPLETED"}}),
     ])
     client = ConversationsApiClient("https://api.example.com", "bot", lambda: "token", session=http)
-    session = CallSession(call_sid="CA1", user="jane@example.com", client=client)
 
-    reply = TurnRunner().run(session, "When does my laptop ship?")
+    events = list(Orchestrator(client).ask(VoiceSession("s1"), "When does my laptop ship?"))
 
-    assert reply == Reply("Your laptop ships Friday.")
+    assert events == [
+        {"type": "progress", "text": "Checking your order."},
+        {"type": "result", "output": {"status": "answered", "answer": "Your laptop ships Friday."}},
+    ]
     assert http.post.call_args.args[0] == "https://api.example.com/rest/v1/conversations/conv_1/responses/stream"
     assert http.post.call_args.kwargs["json"] == {"input": {"chat": {"text": "When does my laptop ship?"}}}
-    method, url = http.request.call_args_list[1].args
-    assert (method, url) == ("GET", "https://api.example.com/rest/v1/conversations/conv_1/responses/resp_1")
+    assert http.request.call_count == 1  # created the conversation; the answer came from the stream
 
 
-# --- webhooks ---------------------------------------------------------------
+# --- the server -------------------------------------------------------------
 
 
-class _InlineExecutor(Executor):
-    """Runs each turn on submit, so tests need no threads."""
+class _FakeOrchestrator(Orchestrator):
+    def __init__(self, events: Optional[List[Dict[str, Any]]] = None, context: str = "Caller: Sam Lee. Use first name Sam.") -> None:
+        super().__init__(MagicMock())
+        self.events = events or [
+            {"type": "progress", "text": "Reading your calendar."},
+            {"type": "result", "output": {"status": "answered", "answer": "Three meetings."}},
+        ]
+        self.context = context
+        self.asked: List[Dict[str, Any]] = []
 
-    def submit(self, fn: Callable[..., Any], /, *args: Any, **kwargs: Any) -> "Future[Any]":
-        future: "Future[Any]" = Future()
-        future.set_result(fn(*args, **kwargs))
-        return future
+    def ask(self, session: VoiceSession, query: str, *, choice: Optional[str] = None) -> Generator[Dict[str, Any], None, None]:
+        self.asked.append({"session": session.session_id, "query": query, "choice": choice})
+        yield from self.events
 
-
-class _HeldExecutor(Executor):
-    """Never finishes a turn, to test waiting."""
-
-    def __init__(self) -> None:
-        self.submitted = 0
-
-    def submit(self, fn: Callable[..., Any], /, *args: Any, **kwargs: Any) -> "Future[Any]":
-        self.submitted += 1
-        return Future()
+    def warm_up(self, session: VoiceSession, query: str) -> str:
+        return self.context
 
 
-class _FakeRunner(TurnRunner):
-    def __init__(self, *replies: Reply) -> None:
-        super().__init__()
-        self.replies = list(replies)
-        self.calls: List[Dict[str, Any]] = []
-
-    def run(self, session: CallSession, text: Optional[str] = None, *, callback_id: Optional[str] = None) -> Reply:
-        self.calls.append({"user": session.user, "text": text, "callback_id": callback_id})
-        return self.replies.pop(0)
+@pytest.fixture
+def secrets_http() -> MagicMock:
+    http = MagicMock()
+    http.post.return_value = MagicMock(status_code=200, json=lambda: {"value": "ek_test", "expires_at": 1900000000})
+    return http
 
 
-class _Call:
-    """A phone call driven through the webhooks, signed like Twilio signs them."""
-
-    def __init__(self, *replies: Reply, executor: Optional[Executor] = None, **settings: Any) -> None:
-        self.runner = _FakeRunner(*replies)
-        self.sessions = CallSessions()
-        self.clients = ClientPool(lambda user: MagicMock(name=user))
-        app = server.create_app(
-            server.VoiceSettings(twilio_auth_token=AUTH_TOKEN, public_url=PUBLIC_URL, wait_slice_seconds=0.0, **settings),
-            directory=CallerDirectory({CALLER: "jane@example.com"}),
-            clients=self.clients,
-            runner=self.runner,
-            executor=executor or _InlineExecutor(),
-            sessions=self.sessions,
-        )
-        self.http = TestClient(app)
-
-    def post(self, path: str, signature: Optional[str] = None, **fields: str) -> Any:
-        params = {"CallSid": "CA1", "From": CALLER, "To": "+15555550199", **fields}
-        signature = signature if signature is not None else twilio_signature(AUTH_TOKEN, PUBLIC_URL + path, params)
-        return self.http.post(path, data=params, headers={"X-Twilio-Signature": signature})
-
-    def twiml(self, path: str, **fields: str) -> ET.Element:
-        response = self.post(path, **fields)
-        assert response.status_code == 200, response.text
-        assert response.headers["content-type"].startswith("application/xml")
-        return ET.fromstring(response.text)
-
-    def say(self, path: str, **fields: str) -> str:
-        """Everything the caller hears from one webhook, in order."""
-        return " ".join(element.text or "" for element in self.twiml(path, **fields).iter("Say"))
-
-    def ask(self, said: str) -> str:
-        """Say something, then hear the answer."""
-        self.twiml("/voice/turn", SpeechResult=said)
-        return self.say("/voice/wait")
+def _app(secrets_http: MagicMock, **kwargs: Any) -> Any:
+    return server.create_app(
+        openai_api_key="sk-server-only",
+        tuning=kwargs.pop("tuning", Tuning.load(env={})),
+        orchestrator=kwargs.pop("orchestrator", _FakeOrchestrator()),
+        user="sam@example.com",
+        http=secrets_http,
+        **kwargs,
+    )
 
 
-def _verbs(root: ET.Element) -> List[str]:
-    return [child.tag for child in root]
+@pytest.fixture
+def local(secrets_http: MagicMock) -> TestClient:
+    return TestClient(_app(secrets_http), base_url="http://127.0.0.1:8095")
 
 
-class TestWebhooks:
-    def test_an_unsigned_request_is_refused(self) -> None:
-        call = _Call()
-        assert call.post("/voice/incoming", signature="").status_code == 403
-        assert call.post("/voice/incoming", signature="bm90IGEgc2lnbmF0dXJl").status_code == 403
-        assert len(call.sessions) == 0
+def _start(client: TestClient) -> Dict[str, Any]:
+    response = client.post("/api/session", json={})
+    assert response.status_code == 200, response.text
+    return response.json()
 
-    def test_an_unknown_caller_hears_why_and_the_call_ends(self) -> None:
-        call = _Call()
-        root = call.twiml("/voice/incoming", From="+15555550123")
-        assert _verbs(root) == ["Say", "Hangup"]
-        assert len(call.sessions) == 0
 
-    def test_a_known_caller_is_greeted_and_heard(self) -> None:
-        call = _Call()
-        root = call.twiml("/voice/incoming")
-        assert _verbs(root) == ["Gather", "Redirect"]
-        gather = root[0]
-        assert gather.attrib["action"] == "/voice/turn"
-        assert gather.attrib["input"] == "speech"
-        assert root[1].text == "/voice/reprompt"
-        assert len(call.sessions) == 1
+class TestServer:
+    def test_serves_the_page_and_script(self, local: TestClient) -> None:
+        assert "voice.js" in local.get("/").text
+        assert "ask_orchestrator" in local.get("/static/voice.js").text
 
-    def test_a_turn_says_a_filler_then_speaks_the_answer(self) -> None:
-        call = _Call(Reply("You have 12 days of PTO."))
-        call.twiml("/voice/incoming")
-        root = call.twiml("/voice/turn", SpeechResult="How much PTO do I have?")
-        assert _verbs(root) == ["Say", "Redirect"]
-        assert root[1].text == "/voice/wait"
-        answer = call.twiml("/voice/wait")
-        assert _verbs(answer) == ["Gather", "Redirect"]
-        assert call.say("/voice/reprompt") == server.STILL_THERE
-        assert call.runner.calls == [{"user": "jane@example.com", "text": "How much PTO do I have?", "callback_id": None}]
+    def test_a_foreign_host_is_refused(self, secrets_http: MagicMock) -> None:
+        rebound = TestClient(_app(secrets_http), base_url="http://attacker.example:8095")
+        assert rebound.post("/api/session", json={}).status_code == 400
 
-    def test_the_answer_is_spoken_inside_a_gather(self) -> None:
-        call = _Call(Reply("You have 12 days of PTO."))
-        call.twiml("/voice/incoming")
-        call.twiml("/voice/turn", SpeechResult="PTO?")
-        gather = call.twiml("/voice/wait").find("Gather")
-        assert gather is not None
-        say = gather.find("Say")
-        assert say is not None and say.text == "You have 12 days of PTO."
+    def test_cross_origin_and_non_json_writes_are_refused(self, local: TestClient) -> None:
+        assert local.post("/api/session", json={}, headers={"Origin": "https://attacker.example"}).status_code == 403
+        assert local.post("/api/session", content="{}", headers={"Content-Type": "text/plain"}).status_code == 415
 
-    def test_a_long_answer_is_read_in_chunks(self) -> None:
-        long_answer = " ".join(f"Step {i} is to do the next thing." for i in range(30))
-        call = _Call(Reply(long_answer), max_speech_chars=200)
-        call.twiml("/voice/incoming")
-        first = call.ask("How do I set up the VPN?")
-        assert first.startswith("Step 0") and first.endswith(server.MORE_PROMPT)
-        second = call.say("/voice/turn", SpeechResult="More.")
-        assert second.startswith("Step ") and not second.startswith("Step 0")
-        assert call.say("/voice/turn", SpeechResult="Say that again.") == second
-        assert len(call.runner.calls) == 1
+    def test_a_session_gets_a_client_secret_never_the_api_key(self, local: TestClient, secrets_http: MagicMock) -> None:
+        body = _start(local)
+        assert body["client_secret"] == "ek_test"
+        assert body["calls_url"] == CALLS_URL
+        assert body["user"] == "sam@example.com"
+        assert body["tuning"]["progress_min_ms"] == 5000
+        assert "sk-server-only" not in json.dumps(body)
+        sent = secrets_http.post.call_args.kwargs["json"]["session"]
+        assert sent["tools"][0]["name"] == "ask_orchestrator"
 
-    def test_a_new_question_drops_the_rest_of_a_long_answer(self) -> None:
-        call = _Call(Reply(" ".join(f"Sentence {i}." for i in range(80))), Reply("It's sunny."), max_speech_chars=100)
-        call.twiml("/voice/incoming")
-        call.ask("Tell me everything")
-        assert call.ask("What's the weather?") == "It's sunny."
+    def test_a_refused_secret_is_a_502(self, secrets_http: MagicMock) -> None:
+        secrets_http.post.return_value = MagicMock(status_code=401, text="bad key")
+        client = TestClient(_app(secrets_http), base_url="http://127.0.0.1:8095")
+        assert client.post("/api/session", json={}).status_code == 502
 
-    def test_buttons_are_read_out_and_pressed_by_voice(self) -> None:
-        call = _Call(Reply("Submit the request?", options={"Submit": "cb_submit", "Cancel": "cb_cancel"}), Reply("Submitted."))
-        call.twiml("/voice/incoming")
-        assert call.ask("Order a new monitor") == "Submit the request? You can say Submit, or Cancel."
-        assert call.ask("Submit it") == "Submitted."
-        assert call.runner.calls[1] == {"user": "jane@example.com", "text": None, "callback_id": "cb_submit"}
+    def test_ask_streams_progress_then_the_result_as_ndjson(self, secrets_http: MagicMock) -> None:
+        fake = _FakeOrchestrator()
+        client = TestClient(_app(secrets_http, orchestrator=fake), base_url="http://127.0.0.1:8095")
+        session_id = _start(client)["session_id"]
+        response = client.post("/api/ask", json={"session_id": session_id, "query": "What's on my calendar?"})
+        assert response.headers["content-type"].startswith("application/x-ndjson")
+        lines = [json.loads(line) for line in response.text.splitlines()]
+        assert lines == fake.events
+        assert fake.asked == [{"session": session_id, "query": "What's on my calendar?", "choice": None}]
 
-    def test_a_link_or_form_is_mentioned(self) -> None:
-        call = _Call(Reply("Here's the enrollment form.", has_link_or_form=True))
-        call.twiml("/voice/incoming")
-        assert call.ask("Enroll me in the 401k") == f"Here's the enrollment form. {server.LINK_NOTE}"
+    def test_ask_needs_a_live_session_and_a_query(self, local: TestClient) -> None:
+        assert local.post("/api/ask", json={"session_id": "nope", "query": "hi"}).status_code == 404
+        session_id = _start(local)["session_id"]
+        assert local.post("/api/ask", json={"session_id": session_id, "query": "  "}).status_code == 400
 
-    def test_asking_for_an_agent_transfers_the_call(self) -> None:
-        call = _Call(transfer_number="+15555550142")
-        call.twiml("/voice/incoming")
-        root = call.twiml("/voice/turn", SpeechResult="Talk to a human.")
-        assert _verbs(root) == ["Say", "Dial"]
-        assert root[1].text == "+15555550142"
-        assert call.runner.calls == []
+    def test_warm_up_returns_the_caller_context(self, local: TestClient) -> None:
+        session_id = _start(local)["session_id"]
+        assert local.post("/api/warmup", json={"session_id": session_id}).json() == {"context": "Caller: Sam Lee. Use first name Sam."}
 
-    def test_without_a_transfer_number_agent_is_an_ordinary_question(self) -> None:
-        call = _Call(Reply("I can help with that."))
-        call.twiml("/voice/incoming")
-        assert call.ask("agent") == "I can help with that."
+    def test_warm_up_off_returns_nothing(self, secrets_http: MagicMock) -> None:
+        client = TestClient(_app(secrets_http, tuning=Tuning.load(env={"VOICE_WARMUP": "off"})), base_url="http://127.0.0.1:8095")
+        session_id = _start(client)["session_id"]
+        assert client.post("/api/warmup", json={"session_id": session_id}).json() == {"context": ""}
 
-    def test_waiting_redirects_and_says_still_working_now_and_then(self) -> None:
-        held = _HeldExecutor()
-        call = _Call(executor=held)
-        call.twiml("/voice/incoming")
-        call.twiml("/voice/turn", SpeechResult="Summarize my tickets")
-        says = []
-        for _ in range(3):
-            root = call.twiml("/voice/wait")
-            assert root[-1].tag == "Redirect" and root[-1].text == "/voice/wait"
-            says.append(" ".join(e.text or "" for e in root.iter("Say")))
-        assert says == ["", "", server.STILL_WORKING]
-
-    def test_a_second_utterance_while_a_turn_runs_is_not_sent(self) -> None:
-        held = _HeldExecutor()
-        call = _Call(executor=held)
-        call.twiml("/voice/incoming")
-        call.twiml("/voice/turn", SpeechResult="first")
-        root = call.twiml("/voice/turn", SpeechResult="first")
-        assert _verbs(root) == ["Redirect"]
-        assert held.submitted == 1
-
-    def test_silence_reprompts_then_hangs_up(self) -> None:
-        call = _Call()
-        call.twiml("/voice/incoming")
-        for _ in range(server.MAX_SILENT_PROMPTS):
-            assert _verbs(call.twiml("/voice/reprompt")) == ["Gather", "Redirect"]
-        assert _verbs(call.twiml("/voice/reprompt")) == ["Say", "Hangup"]
-        assert len(call.sessions) == 0
-
-    def test_an_empty_transcript_asks_again(self) -> None:
-        call = _Call()
-        call.twiml("/voice/incoming")
-        assert call.say("/voice/turn", SpeechResult="") == server.DIDNT_CATCH
-
-    def test_no_ends_the_call_only_after_anything_else(self) -> None:
-        call = _Call(Reply("Want me to file a ticket?"), Reply("Okay, I won't."))
-        call.twiml("/voice/incoming")
-        call.ask("My monitor flickers")
-        assert call.ask("No.") == "Okay, I won't."
-        call.twiml("/voice/reprompt")
-        assert _verbs(call.twiml("/voice/turn", SpeechResult="No thanks.")) == ["Say", "Hangup"]
-        assert len(call.sessions) == 0
-
-    def test_goodbye_ends_the_call(self) -> None:
-        call = _Call()
-        call.twiml("/voice/incoming")
-        assert _verbs(call.twiml("/voice/turn", SpeechResult="Goodbye.")) == ["Say", "Hangup"]
-
-    def test_the_status_callback_drops_a_finished_call(self) -> None:
-        call = _Call()
-        call.twiml("/voice/incoming")
-        assert call.post("/voice/status", CallStatus="completed").status_code == 204
-        assert len(call.sessions) == 0
-        assert _verbs(call.twiml("/voice/turn", SpeechResult="hello?")) == ["Say", "Hangup"]
-
-    def test_each_caller_gets_a_client_for_their_own_user(self) -> None:
-        call = _Call(Reply("Hi."))
-        call.twiml("/voice/incoming")
-        session = call.sessions.get("CA1")
-        assert session is not None
-        assert session.client is call.clients.get("jane@example.com")
+    def test_ending_a_session(self, secrets_http: MagicMock) -> None:
+        sessions = Sessions()
+        client = TestClient(_app(secrets_http, sessions=sessions), base_url="http://127.0.0.1:8095")
+        session_id = _start(client)["session_id"]
+        assert len(sessions) == 1
+        assert client.post("/api/end", json={"session_id": session_id}).json() == {"ended": True}
+        assert len(sessions) == 0
