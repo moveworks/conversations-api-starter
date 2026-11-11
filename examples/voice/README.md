@@ -38,7 +38,7 @@ sequenceDiagram
         Bridge-->>Twilio: Redirect /voice/wait, now and then Say("Still working on it.")
     end
     CAPI-->>Bridge: RESPONSE_COMPLETED, or the 120 s stream limit and then polling
-    Bridge->>CAPI: GET .../responses/{response_id}
+    Bridge->>CAPI: GET .../responses/response_id
     Twilio->>Bridge: POST /voice/wait
     Bridge-->>Twilio: Gather(speech) with Say(first part of the answer)
     Note over Twilio: Text-to-speech
