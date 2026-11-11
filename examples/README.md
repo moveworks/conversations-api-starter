@@ -61,6 +61,8 @@ Recommended order for a new integration:
 
 To see these patterns in one chat surface, run the reference web app with `python -m app` (see the [root README](../README.md#reference-web-app)).
 
+To put the assistant behind a phone number, see [`voice/`](voice/README.md): a Twilio Programmable Voice bridge that turns a call into Conversations API turns and reads the answers back, run with `python -m examples.voice`.
+
 ### `check_setup.py`: End-to-end setup diagnostic
 
 Runs six checks in sequence: required env vars present, base URL reachable, auth exchange succeeds, `POST /conversations` returns a `conversation_id`, a submitted message reaches `COMPLETED`, and the reply contains text. On failure each check prints a diagnostic hint pointing at the most likely misconfiguration.

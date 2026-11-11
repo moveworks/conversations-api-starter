@@ -4,6 +4,7 @@ All notable changes to this project are recorded here. The project is versioned 
 
 ## Unreleased
 
+- `examples/voice/`: a phone bridge to the assistant. A Twilio Programmable Voice call is turned into text with `<Gather input="speech">`, sent as a Conversations API turn in one conversation per call, and read back with `<Say>` in chunks sized for speech. It streams each turn and polls past the 120-second stream limit, submits through the shared client's 429 backoff when a stream open is rate limited, reads button labels aloud and presses the one the caller says, and can transfer the call to a person. Run with `python -m examples.voice`.
 - `mcp_server/`: an example MCP server that exposes the assistant as tools (`ask_moveworks`, `choose_moveworks_option`, `open_moveworks_form`, `submit_moveworks_form`, `get_moveworks_result`), with setup for Claude Code, the Gemini app, Gemini CLI, and other MCP clients. `MCP_OAUTH_ISSUER` publishes OAuth discovery metadata that points MCP clients at your Okta, Entra ID, or Google sign-in. Install with `pip install -e ".[mcp]"` and run `python -m mcp_server`.
 - Reference app: a consent result for a message already in the open thread still shows its status line.
 

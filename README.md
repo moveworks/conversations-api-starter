@@ -11,6 +11,7 @@ Use it to build:
 - **A backend or workflow integration** where a trusted service acts on behalf of specific users.
 - **An evaluation harness** that runs test queries through the assistant.
 - **An example MCP server** that you host, which lets an AI client such as Claude Code or Gemini call the assistant as the signed-in user.
+- **A phone line** where employees call a number and talk to the assistant. The [voice example](examples/voice/) bridges a call through speech-to-text and text-to-speech, since the API itself is text only.
 
 ---
 
@@ -19,7 +20,7 @@ Use it to build:
 | Directory | Contents |
 |---|---|
 | [`moveworks_capi/`](moveworks_capi/) | A client library: HTTP client, auth providers, responses, streaming, file upload, conversations, event polling, webhook verification, and helpers for displaying messages |
-| [`examples/`](examples/) | Runnable scripts, one pattern each. [`examples/README.md`](examples/README.md) lists the environment variables, expected output, and common failures for each. |
+| [`examples/`](examples/) | Runnable scripts, one pattern each. [`examples/README.md`](examples/README.md) lists the environment variables, expected output, and common failures for each. [`examples/voice/`](examples/voice/) is a phone bridge (Twilio Programmable Voice). |
 | [`app/`](app/) | A reference web app: a chat surface built on the library. See [Reference web app](#reference-web-app). |
 | [`mcp_server/`](mcp_server/) | An example MCP server that exposes the assistant as tools, with setup for Claude Code, Gemini, and other MCP clients. See [`mcp_server/README.md`](mcp_server/README.md). |
 | [`tests/`](tests/) | An offline test suite |
@@ -155,6 +156,7 @@ When the reply offers forms, its text ends with a plain-text copy of each one. A
 | An evaluation harness that runs queries as many users | [`s2s_jwt_call.py`](examples/s2s_jwt_call.py) | Self-signed JWT |
 | A backend that acts as a single service-account user | [`api_key_call.py`](examples/api_key_call.py) | HTTP Connector API Key |
 | Tools for an AI client such as Claude Code or Gemini | [`mcp_server/`](mcp_server/) | Okta or Entra ID token exchange, or self-signed JWT |
+| A phone line or contact center integration (voice) | [`examples/voice/`](examples/voice/) | Self-signed JWT, or HTTP Connector API Key |
 | Any of the above, plus proactive notifications | [`poll_events.py`](examples/poll_events.py) or [`receive_webhook.py`](examples/receive_webhook.py) | Any backend path |
 
 ### Choose an auth path
@@ -290,6 +292,7 @@ The suite runs offline, using synthetic keys, mocked endpoints, and recorded mes
 - The rendering helpers
 - The reference app's server
 - The MCP server: the auth gate, sign-in modes, the demo OAuth server, forms, and tool behavior
+- The voice example: speech formatting, TwiML and Twilio request signatures, the turn runner, and the call webhooks
 
 ---
 
