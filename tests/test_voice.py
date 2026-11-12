@@ -456,6 +456,12 @@ class TestServer:
         assert "voice.js" in local.get("/").text
         assert "ask_orchestrator" in local.get("/static/voice.js").text
 
+    def test_fillers_cannot_call_tools(self, local: TestClient) -> None:
+        # Filler prompts quote the caller's query and the orchestrator's status; a filler must never act on them.
+        script = local.get("/static/voice.js").text
+        assert 'tool_choice: "none"' in script
+        assert "JSON.stringify(String(text" in script
+
     def test_a_foreign_host_is_refused(self, secrets_http: MagicMock) -> None:
         rebound = TestClient(_app(secrets_http), base_url="http://attacker.example:8095")
         assert rebound.post("/api/session", json={}).status_code == 400

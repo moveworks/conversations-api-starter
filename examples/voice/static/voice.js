@@ -256,7 +256,7 @@ function startLookup(item, modelSpoke) {
   const t = state.tuning;
   if (!modelSpoke) {
     const delay = t.upfront_filler_ms[args.expected_duration === "long" ? "long" : "quick"];
-    lookup.timers.push(setTimeout(() => speakWhileWaiting(lookup, t.filler.replace("{query}", lookup.query)), delay));
+    lookup.timers.push(setTimeout(() => speakWhileWaiting(lookup, fill(t.filler, "{query}", lookup.query)), delay));
   }
   lookup.timers.push(setInterval(() => progressTick(lookup), 1000));
   runLookup(lookup, args);
@@ -267,18 +267,27 @@ function progressTick(lookup) {
   const quiet = performance.now() - lookup.lastSpokeAt;
   if (state.lookup !== lookup || quiet < t.progress_min_ms) return;
   if (lookup.status && lookup.status !== lookup.spokenStatus) {
-    if (speakWhileWaiting(lookup, t.progress.replace("{status}", lookup.status))) lookup.spokenStatus = lookup.status;
+    if (speakWhileWaiting(lookup, fill(t.progress, "{status}", lookup.status))) lookup.spokenStatus = lookup.status;
   } else if (quiet >= t.progress_max_ms) {
-    speakWhileWaiting(lookup, t.filler.replace("{query}", lookup.query));
+    speakWhileWaiting(lookup, fill(t.filler, "{query}", lookup.query));
   }
 }
 
+// The query and the orchestrator's status can carry text the caller or company
+// content controls, so they go into a filler prompt only as quoted, trimmed data.
+function fill(template, placeholder, text) {
+  const quoted = JSON.stringify(String(text || "").replace(/[\u0000-\u001f\u007f]+/g, " ").trim().slice(0, 160));
+  return template.split(`"${placeholder}"`).join(quoted).split(placeholder).join(quoted);
+}
+
 // An out-of-band response: spoken, but kept out of the conversation, so fillers
-// never become part of what the model remembers.
+// never become part of what the model remembers. No tools: a filler only talks.
 function speakWhileWaiting(lookup, instructions) {
   if (state.lookup !== lookup || state.active || state.queue.length) return false;
   lookup.lastSpokeAt = performance.now();
-  createResponse({ conversation: "none", output_modalities: ["audio"], input: [], instructions, metadata: { kind: "filler" } });
+  createResponse({
+    conversation: "none", output_modalities: ["audio"], input: [], instructions, tool_choice: "none", metadata: { kind: "filler" },
+  });
   return true;
 }
 
